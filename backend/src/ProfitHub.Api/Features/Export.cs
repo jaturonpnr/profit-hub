@@ -19,7 +19,7 @@ public static class Export
                 .ToDictionaryAsync(a => a.Id, a => a.Name);
             var trades = await Reports.Filtered(db, user, accountIds, from, to, magic)
                 .OrderBy(t => t.CloseTimeUtc).ToListAsync();
-            var sb = new StringBuilder("CloseTime,Account,Symbol,Direction,Lots,OpenPrice,ClosePrice,GrossProfit,Commission,Swap,NetProfit,MagicNumber,Comment\n");
+            var sb = new StringBuilder("CloseTime(Local),Account,Symbol,Direction,Lots,OpenPrice,ClosePrice,GrossProfit,Commission,Swap,NetProfit,MagicNumber,Comment\n");
             foreach (var t in trades)
                 sb.AppendLine(string.Join(',',
                     TimeZoneInfo.ConvertTimeFromUtc(t.CloseTimeUtc, tz).ToString("yyyy-MM-dd HH:mm:ss"),

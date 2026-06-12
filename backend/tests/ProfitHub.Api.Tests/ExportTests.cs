@@ -23,7 +23,7 @@ public class ExportTests(ApiFactory f) : IClassFixture<ApiFactory>
         }
         var csv = await client.GetStringAsync("/api/export/trades.csv");
         var lines = csv.Trim().Split('\n');
-        Assert.StartsWith("CloseTime", lines[0]);
+        Assert.StartsWith("CloseTime(Local)", lines[0]);
         Assert.Equal(2, lines.Length);
         Assert.Contains("12.69", lines[1]);
     }

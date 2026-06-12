@@ -37,4 +37,31 @@ public class AccountsTests(ApiFactory f) : IClassFixture<ApiFactory>
         var res = await _f.CreateClient().GetAsync("/api/accounts");
         Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
     }
+
+    [Fact]
+    public async Task Delete_own_account_returns_204_and_disappears_from_list()
+    {
+        var client = await AuthedClient.Create(_f);
+        var res = await client.PostAsJsonAsync("/api/accounts", new { accountNumber = 222, name = "ToDelete", broker = "" });
+        var created = await res.Content.ReadFromJsonAsync<AccountDto>();
+
+        var deleteRes = await client.DeleteAsync($"/api/accounts/{created!.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
+
+        var list = await client.GetFromJsonAsync<AccountDto[]>("/api/accounts");
+        Assert.DoesNotContain(list!, a => a.Id == created.Id);
+    }
+
+    [Fact]
+    public async Task Delete_another_users_account_returns_404()
+    {
+        var userA = await AuthedClient.Create(_f);
+        var userB = await AuthedClient.Create(_f);
+
+        var res = await userA.PostAsJsonAsync("/api/accounts", new { accountNumber = 333, name = "UserAAccount", broker = "" });
+        var created = await res.Content.ReadFromJsonAsync<AccountDto>();
+
+        var deleteRes = await userB.DeleteAsync($"/api/accounts/{created!.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, deleteRes.StatusCode);
+    }
 }
