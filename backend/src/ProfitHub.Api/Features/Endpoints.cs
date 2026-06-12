@@ -9,5 +9,6 @@ public static class Endpoints
         Accounts.Map(app);
         Reports.Map(app);
         EaNames.Map(app);
+        Export.Map(app);
     }
 }
