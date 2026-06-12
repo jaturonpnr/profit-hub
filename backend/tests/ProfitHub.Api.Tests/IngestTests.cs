@@ -65,6 +65,33 @@ public class IngestTests(ApiFactory f) : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Duplicate_ticket_within_one_batch_stores_one_trade()
+    {
+        var (client, acc) = Setup();
+        client.DefaultRequestHeaders.Add("X-Ingest-Key", acc.IngestKey);
+        var res = await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { Deal(30), Deal(30) } });
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        using var scope = _f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal(1, db.Trades.Count(t => t.AccountId == acc.Id));
+    }
+
+    [Fact]
+    public async Task Unknown_type_is_skipped_and_reported()
+    {
+        var (client, acc) = Setup();
+        client.DefaultRequestHeaders.Add("X-Ingest-Key", acc.IngestKey);
+        var res = await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { Deal(40, type: "credit") } });
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var body = await res.Content.ReadFromJsonAsync<Dictionary<string, int>>();
+        Assert.Equal(1, body!["skipped"]);
+        using var scope = _f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal(0, db.Trades.Count(t => t.AccountId == acc.Id));
+        Assert.Equal(0, db.BalanceOperations.Count(b => b.AccountId == acc.Id));
+    }
+
+    [Fact]
     public async Task Bad_key_is_401()
     {
         var (client, _) = Setup();

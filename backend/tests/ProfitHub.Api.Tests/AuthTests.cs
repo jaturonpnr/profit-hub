@@ -18,6 +18,15 @@ public class AuthTests(ApiFactory f) : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Register_same_email_different_case_is_409()
+    {
+        var first = await _client.PostAsJsonAsync("/api/auth/register", new { email = "dup@x.com", password = "secret123" });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        var second = await _client.PostAsJsonAsync("/api/auth/register", new { email = "DUP@X.com", password = "secret123" });
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+    }
+
+    [Fact]
     public async Task Wrong_password_is_401()
     {
         await _client.PostAsJsonAsync("/api/auth/register", new { email = "k@x.com", password = "secret123" });

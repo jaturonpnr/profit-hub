@@ -15,16 +15,29 @@ public static class Auth
     {
         app.MapPost("/api/auth/register", async (Creds c, AppDbContext db) =>
         {
+            if (string.IsNullOrEmpty(c.Email) || string.IsNullOrEmpty(c.Password))
+                return Results.BadRequest(new { error = "email and password required" });
             if (c.Password.Length < 8) return Results.BadRequest(new { error = "password too short" });
-            if (await db.Users.AnyAsync(u => u.Email == c.Email)) return Results.Conflict();
-            db.Users.Add(new User { Email = c.Email, PasswordHash = BCrypt.Net.BCrypt.HashPassword(c.Password) });
-            await db.SaveChangesAsync();
+            var email = c.Email.Trim().ToLowerInvariant();
+            if (await db.Users.AnyAsync(u => u.Email == email)) return Results.Conflict();
+            db.Users.Add(new User { Email = email, PasswordHash = BCrypt.Net.BCrypt.HashPassword(c.Password) });
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                return Results.Conflict();
+            }
             return Results.Ok();
         });
 
         app.MapPost("/api/auth/login", async (Creds c, AppDbContext db, JwtSettings jwt) =>
         {
-            var user = await db.Users.FirstOrDefaultAsync(u => u.Email == c.Email);
+            if (string.IsNullOrEmpty(c.Email) || string.IsNullOrEmpty(c.Password))
+                return Results.BadRequest(new { error = "email and password required" });
+            var email = c.Email.Trim().ToLowerInvariant();
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
             if (user is null || !BCrypt.Net.BCrypt.Verify(c.Password, user.PasswordHash))
                 return Results.Unauthorized();
             var token = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(

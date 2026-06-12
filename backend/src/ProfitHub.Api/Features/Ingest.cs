@@ -15,6 +15,9 @@ public static class Ingest
     {
         app.MapPost("/api/ingest/deals", async (HttpRequest req, Batch batch, AppDbContext db) =>
         {
+            if (batch?.Deals is null) return Results.BadRequest(new { error = "deals required" });
+            if (batch.Deals.Length > 1000) return Results.BadRequest(new { error = "too many deals (max 1000)" });
+
             var key = req.Headers["X-Ingest-Key"].ToString();
             var acc = await db.Accounts.FirstOrDefaultAsync(a => a.IngestKey == key);
             if (acc is null) return Results.Unauthorized();
@@ -25,6 +28,7 @@ public static class Ingest
             var existingBalOps = (await db.BalanceOperations.Where(b => b.AccountId == acc.Id && tickets.Contains(b.DealTicket))
                 .Select(b => b.DealTicket).ToListAsync()).ToHashSet();
 
+            var skipped = 0;
             foreach (var d in batch.Deals)
             {
                 if (d.Type == "balance")
@@ -33,8 +37,9 @@ public static class Ingest
                     db.BalanceOperations.Add(new BalanceOperation
                     {
                         AccountId = acc.Id, DealTicket = d.DealTicket, Amount = d.GrossProfit,
-                        TimeUtc = d.CloseTimeUtc, Comment = d.Comment ?? ""
+                        TimeUtc = DateTime.SpecifyKind(d.CloseTimeUtc, DateTimeKind.Utc), Comment = d.Comment ?? ""
                     });
+                    existingBalOps.Add(d.DealTicket);
                 }
                 else if (d.Type is "buy" or "sell")
                 {
@@ -50,11 +55,23 @@ public static class Ingest
                         NetProfit = d.GrossProfit + d.Commission + d.Swap,
                         MagicNumber = d.MagicNumber, Comment = d.Comment ?? ""
                     });
+                    existingTrades.Add(d.DealTicket);
+                }
+                else
+                {
+                    skipped++;
                 }
             }
             acc.LastIngestAtUtc = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-            return Results.Ok(new { received = batch.Deals.Length });
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                return Results.Conflict();
+            }
+            return Results.Ok(new { received = batch.Deals.Length, skipped });
         });
     }
 }
