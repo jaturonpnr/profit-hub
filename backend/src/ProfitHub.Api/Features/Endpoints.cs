@@ -6,5 +6,6 @@ public static class Endpoints
     {
         Auth.Map(app);
         Ingest.Map(app);
+        Accounts.Map(app);
     }
 }
