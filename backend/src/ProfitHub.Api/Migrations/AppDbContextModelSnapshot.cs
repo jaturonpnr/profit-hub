@@ -231,6 +231,24 @@ namespace ProfitHub.Api.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ProfitHub.Api.Domain.BalanceOperation", b =>
+                {
+                    b.HasOne("ProfitHub.Api.Domain.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ProfitHub.Api.Domain.EaName", b =>
+                {
+                    b.HasOne("ProfitHub.Api.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ProfitHub.Api.Domain.Trade", b =>
                 {
                     b.HasOne("ProfitHub.Api.Domain.Account", null)

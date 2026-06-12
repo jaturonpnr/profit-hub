@@ -12,7 +12,7 @@ using ProfitHub.Api.Domain;
 namespace ProfitHub.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260612111600_Initial")]
+    [Migration("20260612155003_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -229,6 +229,24 @@ namespace ProfitHub.Api.Migrations
                 {
                     b.HasOne("ProfitHub.Api.Domain.User", null)
                         .WithMany("Accounts")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ProfitHub.Api.Domain.BalanceOperation", b =>
+                {
+                    b.HasOne("ProfitHub.Api.Domain.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ProfitHub.Api.Domain.EaName", b =>
+                {
+                    b.HasOne("ProfitHub.Api.Domain.User", null)
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

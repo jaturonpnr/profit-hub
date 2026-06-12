@@ -9,7 +9,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "dev-only-key-change-me-0123456789abcdef";
+var jwtKeyConfig = builder.Configuration["Jwt:Key"];
+if (builder.Environment.IsProduction() && jwtKeyConfig is null)
+    throw new InvalidOperationException("Jwt:Key must be configured");
+var jwtKey = jwtKeyConfig ?? "dev-only-key-change-me-0123456789abcdef";
 builder.Services.AddSingleton(new JwtSettings(jwtKey));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(o => o.TokenValidationParameters = new TokenValidationParameters
@@ -19,7 +22,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.WithOrigins(builder.Configuration["Cors:Origins"]?.Split(',') ?? ["http://localhost:4200"])
+    p.WithOrigins(builder.Configuration["Cors:Origins"]?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) ?? ["http://localhost:4200"])
      .AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();

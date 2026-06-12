@@ -19,6 +19,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Trade>().HasIndex(x => x.CloseTimeUtc);
         b.Entity<Trade>().HasOne<Account>().WithMany(a => a.Trades).HasForeignKey(t => t.AccountId);
         b.Entity<BalanceOperation>().HasIndex(x => new { x.AccountId, x.DealTicket }).IsUnique();
+        b.Entity<BalanceOperation>().HasOne<Account>().WithMany().HasForeignKey(bo => bo.AccountId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<EaName>().HasIndex(x => new { x.UserId, x.MagicNumber }).IsUnique();
+        b.Entity<EaName>().HasOne<User>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }
