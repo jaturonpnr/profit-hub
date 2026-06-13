@@ -13,8 +13,10 @@ Render (Docker), and the Angular frontend on Vercel.
 
    `Jwt__Key` is generated automatically by Render.
 3. **Vercel** — `cd frontend && npx vercel --prod` (project root directory =
-   `frontend`). The SPA rewrite in `frontend/vercel.json` routes all paths to
-   `index.html`.
+   `frontend`). Angular 18's application builder outputs to
+   `dist/frontend/browser`, so `frontend/vercel.json` sets `outputDirectory` to
+   that path — without it Vercel serves the wrong folder and the app comes up
+   blank. The SPA rewrite in the same file routes all paths to `index.html`.
 4. **Smoke test** — register → add account → curl ingest with the Ingest Key →
    confirm the trade appears on the dashboard → export CSV.
 5. **EA** — Update `ea/README.md` and the EA's default `ApiUrl` with the real
