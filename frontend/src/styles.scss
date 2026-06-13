@@ -1,0 +1,88 @@
+/* Profit Hub dark theme */
+:root {
+  --bg: #0f1217;
+  --bg-raised: #161a22;
+  --border: #2a2f3a;
+  --text: #e6e8ec;
+  --text-muted: #8b919e;
+  --profit: #30a46c;
+  --loss: #e5484d;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+}
+
+h1, h2, h3 { font-weight: 600; }
+
+a {
+  color: var(--text-muted);
+  text-decoration: none;
+  &:hover { color: var(--text); }
+}
+
+.profit { color: var(--profit); }
+.loss { color: var(--loss); }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+
+  th, td {
+    text-align: left;
+    padding: .5rem .75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  th { color: var(--text-muted); font-weight: 500; }
+}
+
+input, select, button {
+  background: var(--bg-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .5rem .75rem;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+input:focus, select:focus { outline: 1px solid var(--profit); }
+
+button {
+  cursor: pointer;
+  background: var(--profit);
+  border-color: var(--profit);
+  color: #fff;
+
+  &:hover { filter: brightness(1.1); }
+
+  &.secondary {
+    background: var(--bg-raised);
+    border-color: var(--border);
+    color: var(--text);
+  }
+}
+
+code {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: .15rem .4rem;
+  cursor: pointer;
+}
+
+details {
+  position: relative;
+
+  summary { cursor: pointer; }
+
+  label { display: block; padding: .25rem 0; white-space: nowrap; }
+}
