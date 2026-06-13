@@ -46,6 +46,7 @@ void OnTimer()
    ArrayResize(swaps, g_batch);    ArrayResize(magics, g_batch);   ArrayResize(comments, g_batch);
 
    int count = 0;
+   bool hitBatchLimit = false; // true when the loop was cut short by the batch cap
    datetime maxTime = from; // advances ONLY over deals included in this batch
 
    for(int i = 0; i < total; i++)
@@ -78,7 +79,7 @@ void OnTimer()
 
       if(t > maxTime) maxTime = t;
       count++;
-      if(count >= g_batch) break; // remaining deals go next timer tick; watermark stops at last INCLUDED deal
+      if(count >= g_batch) { hitBatchLimit = true; break; } // remaining deals go next timer tick; watermark stops at last INCLUDED deal
    }
 
    if(count == 0) return;
@@ -103,7 +104,7 @@ void OnTimer()
       if(j > 0) json += ",";
       json += StringFormat(
         "{\"dealTicket\":%I64u,\"positionId\":%I64d,\"symbol\":\"%s\",\"type\":\"%s\","
-        "\"lots\":%.2f,\"openPrice\":%.5f,\"closePrice\":%.5f,"
+        "\"lots\":%.3f,\"openPrice\":%.5f,\"closePrice\":%.5f,"
         "\"openTimeUtc\":\"%s\",\"closeTimeUtc\":\"%s\","
         "\"grossProfit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,"
         "\"magicNumber\":%I64d,\"comment\":\"%s\"}",
@@ -115,7 +116,13 @@ void OnTimer()
    }
 
    if(Push("[" + json + "]"))
-      GlobalVariableSet(GV_LAST, (double)maxTime); // advance watermark only on success
+   {
+      // When the batch limit was hit, persist maxTime-1 so the next cycle re-fetches
+      // deals sharing the same second as the last included deal — there may be more of
+      // them that were cut off. The backend deduplicates, so re-sending is safe.
+      datetime watermark = hitBatchLimit ? maxTime - 1 : maxTime;
+      GlobalVariableSet(GV_LAST, (double)watermark); // advance watermark only on success
+   }
 }
 
 string ToIsoUtc(datetime serverTime)
