@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: profit-hub-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ConnectionStrings__Default
+        sync: false   # paste Neon connection string in Render dashboard
+      - key: Jwt__Key
+        generateValue: true
+      - key: Cors__Origins
+        sync: false   # set to the Vercel URL, e.g. https://profit-hub.vercel.app

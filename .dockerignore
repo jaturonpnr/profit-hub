@@ -1,0 +1,7 @@
+**/bin/
+**/obj/
+frontend/
+docs/
+.git/
+.vs/
+.vscode/
