@@ -41,7 +41,7 @@ public static class Auth
             if (user is null || !BCrypt.Net.BCrypt.Verify(c.Password, user.PasswordHash))
                 return Results.Unauthorized();
             var token = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
-                claims: [new Claim("sub", user.Id.ToString()), new Claim("tz", user.TimeZone)],
+                claims: [new Claim("sub", user.Id.ToString()), new Claim("tz", user.TimeZone), new Claim("email", user.Email)],
                 expires: DateTime.UtcNow.AddDays(30),
                 signingCredentials: new SigningCredentials(
                     new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)), SecurityAlgorithms.HmacSha256)));

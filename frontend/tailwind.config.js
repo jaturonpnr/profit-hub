@@ -56,9 +56,12 @@ module.exports = {
         sans: ['"Inter Variable"', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
       },
       keyframes: {
+        // Opacity-only: a transform here would leave a lingering containing
+        // block (animation-fill-mode: both), trapping `position: fixed`
+        // descendants like modals. Keep it transform-free.
         'fade-in': {
-          '0%': { opacity: '0', transform: 'translateY(4px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         },
       },
       animation: {
