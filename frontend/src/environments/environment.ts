@@ -1,3 +1,3 @@
 export const environment = {
-  apiUrl: 'https://profit-hub-api.onrender.com',
+  apiUrl: 'https://profit-hub-service.onrender.com',
 };
