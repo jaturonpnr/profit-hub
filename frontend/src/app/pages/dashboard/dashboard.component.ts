@@ -1,69 +1,247 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, signal } from '@angular/core';
+import { Component, OnInit, computed, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
-import { Chart, registerables } from 'chart.js';
+import {
+  NgApexchartsModule, ApexChart, ApexAxisChartSeries, ApexFill, ApexStroke,
+  ApexDataLabels, ApexGrid, ApexXAxis, ApexYAxis, ApexTooltip, ApexMarkers,
+} from 'ng-apexcharts';
 import { ApiService } from '../../core/api.service';
 import { FilterService } from '../../core/filter.service';
 import { FilterBarComponent } from '../../shared/filter-bar.component';
-
-Chart.register(...registerables);
+import {
+  UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent,
+} from '../../shared/ui';
 
 interface SummaryRow { periodStart: string; netProfit: number; tradeCount: number; wins: number; }
 interface EaRow { magicNumber: number; name: string; netProfit: number; tradeCount: number; }
 
+/**
+ * Dashboard — 4 stat cards (Today / Week / Month / All-time) with count-up +
+ * ApexCharts sparklines, a violet gradient cumulative-P/L area chart, and dense
+ * Daily P/L + By-EA tables.
+ *
+ * Presentation only. All data logic is preserved verbatim: reload() and its
+ * Promise.all fetches, currentPeriodKeys(), the Bangkok-tz card lookups, the
+ * today/week/month/allTime signals, the days()/eas() signals, and the
+ * <ph-filter-bar (changed)="reload()"> wiring. The chart data prep (reverse to
+ * ascending + cumulative sum) is reused; only the render target changed to an
+ * ApexCharts area chart with series bound via signals.
+ */
 @Component({
   selector: 'ph-dashboard',
   standalone: true,
-  imports: [FilterBarComponent, DecimalPipe],
+  imports: [
+    FilterBarComponent, DecimalPipe, NgApexchartsModule,
+    UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent,
+  ],
   template: `
-    <h1>Dashboard</h1>
-    <ph-filter-bar (changed)="reload()" />
-    <div class="cards">
-      <div class="card"><span>Today</span><b [class.neg]="today() < 0">{{ today() | number:'1.2-2' }}</b></div>
-      <div class="card"><span>This week</span><b [class.neg]="week() < 0">{{ week() | number:'1.2-2' }}</b></div>
-      <div class="card"><span>This month</span><b [class.neg]="month() < 0">{{ month() | number:'1.2-2' }}</b></div>
-      <div class="card"><span>All time</span><b [class.neg]="allTime() < 0">{{ allTime() | number:'1.2-2' }}</b></div>
-    </div>
-    <canvas #chart height="80"></canvas>
-    <div class="tables">
-      <table>
-        <caption>Daily P/L</caption>
-        <tr><th>Day</th><th>Net</th><th>Trades</th><th>Win %</th></tr>
-        @for (r of days(); track r.periodStart) {
-          <tr><td>{{ r.periodStart }}</td>
-              <td [class.neg]="r.netProfit < 0">{{ r.netProfit | number:'1.2-2' }}</td>
-              <td>{{ r.tradeCount }}</td>
-              <td>{{ r.tradeCount ? (100 * r.wins / r.tradeCount).toFixed(0) : 0 }}%</td></tr>
-        }
-      </table>
-      <table>
-        <caption>By EA</caption>
-        <tr><th>EA</th><th>Net</th><th>Trades</th></tr>
-        @for (r of eas(); track r.magicNumber) {
-          <tr><td>{{ r.name }}</td>
-              <td [class.neg]="r.netProfit < 0">{{ r.netProfit | number:'1.2-2' }}</td>
-              <td>{{ r.tradeCount }}</td></tr>
-        }
-      </table>
+    <div class="animate-fade-in flex flex-col gap-6">
+      <div>
+        <h1 class="text-xl font-semibold tracking-tight">Dashboard</h1>
+        <p class="text-sm text-text-muted mt-0.5">Realised P/L across your accounts.</p>
+      </div>
+
+      <ph-filter-bar (changed)="reload()" />
+
+      <!-- Stat cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <ui-stat-card label="Today" [value]="today()" [series]="dailySpark()" />
+        <ui-stat-card label="This week" [value]="week()" [series]="dailySpark()" />
+        <ui-stat-card label="This month" [value]="month()" [series]="dailySpark()" />
+        <ui-stat-card label="All time" [value]="allTime()" [series]="cumulativeSpark()" />
+      </div>
+
+      <!-- Cumulative P/L area chart -->
+      <ui-card [hasHeader]="true" [padded]="false">
+        <div uiCardHeader>
+          <h2 class="text-sm font-medium text-text-muted">Cumulative net profit</h2>
+        </div>
+        <div class="px-2 pb-2 pt-4">
+          <apx-chart
+            [series]="cumulativeSeries()"
+            [chart]="chart"
+            [colors]="['#8b5cf6']"
+            [fill]="fill"
+            [stroke]="stroke"
+            [dataLabels]="dataLabels"
+            [grid]="grid"
+            [xaxis]="xaxis()"
+            [yaxis]="yaxis"
+            [tooltip]="tooltip"
+            [markers]="markers"
+          ></apx-chart>
+        </div>
+      </ui-card>
+
+      <!-- Tables -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <div class="flex flex-col gap-3">
+          <h2 class="text-sm font-medium text-text-muted">Daily P/L</h2>
+          <ui-table dense>
+            <table>
+              <thead>
+                <tr>
+                  <th>Day</th>
+                  <th class="!text-right">Net</th>
+                  <th class="!text-right">Trades</th>
+                  <th>Win %</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of days(); track r.periodStart) {
+                  <tr>
+                    <td class="tabular-nums text-text-muted">{{ r.periodStart }}</td>
+                    <td
+                      class="text-right tabular-nums font-medium"
+                      [class.text-profit]="r.netProfit >= 0"
+                      [class.text-loss]="r.netProfit < 0"
+                    >{{ r.netProfit | number:'1.2-2' }}</td>
+                    <td class="text-right tabular-nums text-text-muted">{{ r.tradeCount }}</td>
+                    <td>
+                      <div class="flex items-center gap-2">
+                        <div class="h-1.5 w-16 rounded-full bg-surface-raised overflow-hidden">
+                          <div
+                            class="h-full rounded-full bg-brand-500"
+                            [style.width.%]="r.tradeCount ? (100 * r.wins / r.tradeCount) : 0"
+                          ></div>
+                        </div>
+                        <span class="text-xs tabular-nums text-text-muted">{{ r.tradeCount ? (100 * r.wins / r.tradeCount).toFixed(0) : 0 }}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="4" class="!py-8 text-center text-sm text-text-faint">No data for this range.</td></tr>
+                }
+              </tbody>
+            </table>
+          </ui-table>
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <h2 class="text-sm font-medium text-text-muted">By EA</h2>
+          <ui-table dense>
+            <table>
+              <thead>
+                <tr>
+                  <th>EA</th>
+                  <th class="!text-right">Net</th>
+                  <th class="!text-right">Trades</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of eas(); track r.magicNumber) {
+                  <tr>
+                    <td>
+                      <ui-badge variant="brand">{{ r.name }}</ui-badge>
+                    </td>
+                    <td
+                      class="text-right tabular-nums font-medium"
+                      [class.text-profit]="r.netProfit >= 0"
+                      [class.text-loss]="r.netProfit < 0"
+                    >{{ r.netProfit | number:'1.2-2' }}</td>
+                    <td class="text-right tabular-nums text-text-muted">{{ r.tradeCount }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="3" class="!py-8 text-center text-sm text-text-faint">No EA activity for this range.</td></tr>
+                }
+              </tbody>
+            </table>
+          </ui-table>
+        </div>
+      </div>
     </div>
   `,
-  styles: [`.cards{display:flex;gap:1rem;margin:1rem 0}
-            .card{padding:1rem;border:1px solid #2a2f3a;border-radius:8px;min-width:140px}
-            .card b{display:block;font-size:1.4rem;color:#30a46c}
-            b.neg,td.neg{color:#e5484d!important}
-            .tables{display:flex;gap:2rem;margin-top:1.5rem;align-items:flex-start}`],
 })
-export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
-  @ViewChild('chart') chartRef!: ElementRef<HTMLCanvasElement>;
+export class DashboardComponent implements OnInit {
   days = signal<SummaryRow[]>([]);
   eas = signal<EaRow[]>([]);
   today = signal(0); week = signal(0); month = signal(0); allTime = signal(0);
-  private chart?: Chart;
 
   constructor(private api: ApiService, private filter: FilterService) {}
   async ngOnInit() { await this.reload(); }
-  ngAfterViewInit() { this.draw(); }
-  ngOnDestroy() { this.chart?.destroy(); }
+
+  /**
+   * Ascending daily rows (reverse of the descending API order). Shared by the
+   * cumulative chart and the sparklines — this is the existing draw() data prep.
+   */
+  private ascDays = computed(() => [...this.days()].reverse());
+
+  /** Cumulative net-profit series (ascending). Reuses the old draw() cumulative sum. */
+  private cumulative = computed(() => {
+    let cum = 0;
+    return this.ascDays().map(d => (cum += d.netProfit));
+  });
+
+  /** Main area-chart series: x = period labels, y = cumulative net profit. */
+  cumulativeSeries = computed<ApexAxisChartSeries>(() => [{
+    name: 'Cumulative Net Profit',
+    data: this.cumulative(),
+  }]);
+
+  /** X-axis category labels for the area chart. */
+  xaxis = computed<ApexXAxis>(() => ({
+    categories: this.ascDays().map(d => d.periodStart),
+    labels: { style: { colors: '#8b8f9e', fontSize: '11px' } },
+    axisBorder: { show: false },
+    axisTicks: { show: false },
+    tooltip: { enabled: false },
+  }));
+
+  /** Sparkline series — last ~12 daily netProfit values (derived, no fetch). */
+  dailySpark = computed(() => this.ascDays().slice(-12).map(d => d.netProfit));
+
+  /** Sparkline series — last ~12 cumulative values (derived, no fetch). */
+  cumulativeSpark = computed(() => this.cumulative().slice(-12));
+
+  // ── ApexCharts static options ──────────────────────────────────────────────
+  readonly chart: ApexChart = {
+    type: 'area',
+    height: 280,
+    background: 'transparent',
+    toolbar: { show: false },
+    zoom: { enabled: false },
+    fontFamily: 'inherit',
+    animations: { enabled: true, speed: 500 },
+  };
+
+  readonly fill: ApexFill = {
+    type: 'gradient',
+    gradient: {
+      shadeIntensity: 1,
+      opacityFrom: 0.45,
+      opacityTo: 0,
+      stops: [0, 95],
+      colorStops: [
+        { offset: 0, color: '#8b5cf6', opacity: 0.45 },
+        { offset: 100, color: '#8b5cf6', opacity: 0 },
+      ],
+    },
+  };
+
+  readonly stroke: ApexStroke = { curve: 'smooth', width: 2 };
+  readonly dataLabels: ApexDataLabels = { enabled: false };
+  readonly markers: ApexMarkers = { size: 0, hover: { size: 4 } };
+
+  readonly grid: ApexGrid = {
+    borderColor: 'rgba(255,255,255,0.04)',
+    strokeDashArray: 4,
+    xaxis: { lines: { show: false } },
+    yaxis: { lines: { show: true } },
+    padding: { left: 8, right: 8 },
+  };
+
+  readonly yaxis: ApexYAxis = {
+    labels: {
+      style: { colors: '#8b8f9e', fontSize: '11px' },
+      formatter: (v: number) => v.toFixed(0),
+    },
+  };
+
+  readonly tooltip: ApexTooltip = {
+    theme: 'dark',
+    x: { show: true },
+    y: { formatter: (v: number) => v.toFixed(2) },
+  };
 
   /**
    * Compute the periodStart keys ("yyyy-MM-dd") for the current week and month in
@@ -108,20 +286,5 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     this.week.set(weeks.find(w => w.periodStart === weekStr)?.netProfit ?? 0);
     this.month.set(months.find(m => m.periodStart === monthStr)?.netProfit ?? 0);
     this.allTime.set(days.reduce((s, d) => s + d.netProfit, 0));
-    this.draw();
-  }
-
-  private draw() {
-    if (!this.chartRef) return;
-    const asc = [...this.days()].reverse();
-    let cum = 0;
-    const data = asc.map(d => (cum += d.netProfit));
-    this.chart?.destroy();
-    this.chart = new Chart(this.chartRef.nativeElement, {
-      type: 'line',
-      data: { labels: asc.map(d => d.periodStart),
-              datasets: [{ label: 'Cumulative Net Profit', data, borderColor: '#30a46c', tension: 0.2, pointRadius: 0 }] },
-      options: { plugins: { legend: { display: false } } },
-    });
   }
 }

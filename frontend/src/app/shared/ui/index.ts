@@ -5,3 +5,4 @@ export { UiCardComponent } from './ui-card.component';
 export { UiBadgeComponent } from './ui-badge.component';
 export type { UiBadgeVariant } from './ui-badge.component';
 export { UiTableComponent } from './ui-table.component';
+export { UiStatCardComponent } from './ui-stat-card.component';
