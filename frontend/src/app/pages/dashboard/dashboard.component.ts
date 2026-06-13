@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
 import { Chart, registerables } from 'chart.js';
@@ -53,7 +53,7 @@ interface EaRow { magicNumber: number; name: string; netProfit: number; tradeCou
             b.neg,td.neg{color:#e5484d!important}
             .tables{display:flex;gap:2rem;margin-top:1.5rem;align-items:flex-start}`],
 })
-export class DashboardComponent implements OnInit, AfterViewInit {
+export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('chart') chartRef!: ElementRef<HTMLCanvasElement>;
   days = signal<SummaryRow[]>([]);
   eas = signal<EaRow[]>([]);
@@ -63,6 +63,31 @@ export class DashboardComponent implements OnInit, AfterViewInit {
   constructor(private api: ApiService, private filter: FilterService) {}
   async ngOnInit() { await this.reload(); }
   ngAfterViewInit() { this.draw(); }
+  ngOnDestroy() { this.chart?.destroy(); }
+
+  /**
+   * Compute the periodStart keys ("yyyy-MM-dd") for the current week and month in
+   * Asia/Bangkok, matching how the backend buckets weekly/monthly summary rows.
+   * Weeks bucket to the ISO Monday of the week; months bucket to the 1st.
+   * NOTE: timezone is hardcoded to Asia/Bangkok pending the authenticated user's
+   * own timezone claim — only correct while that timezone is Asia/Bangkok.
+   */
+  private currentPeriodKeys(): { weekStr: string; monthStr: string } {
+    // en-CA / sv-SE both yield yyyy-MM-dd; parse Bangkok-local today into y/m/d.
+    const [y, m, d] = new Date()
+      .toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+      .split('-')
+      .map(Number);
+    // Anchor at UTC midnight so weekday/date arithmetic is timezone-agnostic.
+    const base = new Date(Date.UTC(y, m - 1, d));
+    // getUTCDay: 0=Sun..6=Sat. Convert to ISO Monday-start offset (Mon=0..Sun=6).
+    const isoOffset = (base.getUTCDay() + 6) % 7;
+    const monday = new Date(base);
+    monday.setUTCDate(base.getUTCDate() - isoOffset);
+    const fmt = (dt: Date) => dt.toISOString().slice(0, 10);
+    const monthStr = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-01`;
+    return { weekStr: fmt(monday), monthStr };
+  }
 
   async reload() {
     const p = this.filter.queryParams();
@@ -78,9 +103,10 @@ export class DashboardComponent implements OnInit, AfterViewInit {
     // those local-date periodStart values. TODO: this should ideally use the authenticated
     // user's own timezone — it is only correct while that timezone is Asia/Bangkok.
     const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' });
+    const { weekStr, monthStr } = this.currentPeriodKeys();
     this.today.set(days.find(d => d.periodStart === todayStr)?.netProfit ?? 0);
-    this.week.set(weeks[0]?.netProfit ?? 0);
-    this.month.set(months[0]?.netProfit ?? 0);
+    this.week.set(weeks.find(w => w.periodStart === weekStr)?.netProfit ?? 0);
+    this.month.set(months.find(m => m.periodStart === monthStr)?.netProfit ?? 0);
     this.allTime.set(days.reduce((s, d) => s + d.netProfit, 0));
     this.draw();
   }
