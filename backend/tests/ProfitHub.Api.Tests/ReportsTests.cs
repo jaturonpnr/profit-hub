@@ -60,4 +60,38 @@ public class ReportsTests(ApiFactory f) : IClassFixture<ApiFactory>
         var page = await client.GetFromJsonAsync<System.Text.Json.JsonElement>($"/api/trades?accountIds={accId}");
         Assert.Equal(1, page.GetProperty("total").GetInt32());
     }
+
+    [Fact]
+    public async Task Bare_date_range_is_inclusive_of_the_to_day_in_user_timezone()
+    {
+        // Three consecutive Bangkok (UTC+7) days:
+        var (client, accId) = await SeedAsync(
+            (1, "2026-06-01T03:00:00Z", 10m),  // day1: 2026-06-01 10:00 Bangkok
+            (2, "2026-06-02T16:30:00Z", 5m),   // day2: 2026-06-02 23:30 Bangkok (late on the `to` day)
+            (3, "2026-06-02T17:30:00Z", 7m));  // day3: 2026-06-03 00:30 Bangkok (must be excluded)
+        var page = await client.GetFromJsonAsync<System.Text.Json.JsonElement>(
+            $"/api/trades?accountIds={accId}&from=2026-06-01&to=2026-06-02");
+        Assert.Equal(2, page.GetProperty("total").GetInt32());
+        var tickets = page.GetProperty("items").EnumerateArray()
+            .Select(i => i.GetProperty("dealTicket").GetInt64()).ToArray();
+        Assert.Contains(1L, tickets);
+        Assert.Contains(2L, tickets);
+        Assert.DoesNotContain(3L, tickets);
+    }
+
+    [Fact]
+    public async Task Invalid_accountIds_returns_400()
+    {
+        var client = await AuthedClient.Create(_f);
+        var res = await client.GetAsync("/api/trades?accountIds=not-a-guid");
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task Invalid_period_returns_400()
+    {
+        var client = await AuthedClient.Create(_f);
+        var res = await client.GetAsync("/api/summary?period=year");
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, res.StatusCode);
+    }
 }
