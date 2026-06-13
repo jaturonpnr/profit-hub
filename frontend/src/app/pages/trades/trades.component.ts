@@ -36,7 +36,7 @@ interface Trade {
           <td>{{ t.lots }}</td><td>{{ t.openPrice }}</td><td>{{ t.closePrice }}</td>
           <td [class.neg]="t.netProfit < 0" class="profit">{{ t.netProfit | number:'1.2-2' }}</td>
           <td>{{ t.magicNumber }}</td>
-          <td>{{ t.closeTimeUtc + 'Z' | date:'short' }}</td>
+          <td>{{ t.closeTimeUtc | date:'short' }}</td>
         </tr>
       }
     </table>

@@ -17,7 +17,7 @@ import { FilterService, AccountInfo } from '../../core/filter.service';
         <tr>
           <td>{{ a.accountNumber }}</td><td>{{ a.name }}</td><td>{{ a.broker }}</td>
           <td><code (click)="copy(a.ingestKey)" title="Click to copy">{{ a.ingestKey.slice(0, 8) }}…</code></td>
-          <td [class.stale]="isStale(a)">{{ a.lastIngestAtUtc ? (a.lastIngestAtUtc + 'Z' | date:'short') : 'never' }}</td>
+          <td [class.stale]="isStale(a)">{{ a.lastIngestAtUtc ? (a.lastIngestAtUtc | date:'short') : 'never' }}</td>
           <td><button (click)="remove(a)">Delete</button></td>
         </tr>
       }
@@ -51,5 +51,5 @@ export class AccountsComponent implements OnInit {
     await this.reload();
   }
   copy(key: string) { navigator.clipboard.writeText(key); this.copied.set(true); setTimeout(() => this.copied.set(false), 1500); }
-  isStale(a: AccountInfo) { return !a.lastIngestAtUtc || Date.now() - Date.parse(a.lastIngestAtUtc + 'Z') > 15 * 60_000; }
+  isStale(a: AccountInfo) { return !a.lastIngestAtUtc || Date.now() - Date.parse(a.lastIngestAtUtc) > 15 * 60_000; }
 }

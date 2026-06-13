@@ -3,11 +3,18 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ProfitHub.Api.Domain;
+using ProfitHub.Api.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+
+builder.Services.ConfigureHttpJsonOptions(o =>
+{
+    o.SerializerOptions.Converters.Add(new UtcDateTimeConverter());
+    o.SerializerOptions.Converters.Add(new NullableUtcDateTimeConverter());
+});
 
 var jwtKeyConfig = builder.Configuration["Jwt:Key"];
 if (builder.Environment.IsProduction() && jwtKeyConfig is null)
