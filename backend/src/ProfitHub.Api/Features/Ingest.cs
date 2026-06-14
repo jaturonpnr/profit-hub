@@ -23,39 +23,45 @@ public static class Ingest
             if (acc is null) return Results.Unauthorized();
 
             var tickets = batch.Deals.Select(d => d.DealTicket).ToArray();
-            var existingTrades = (await db.Trades.Where(t => t.AccountId == acc.Id && tickets.Contains(t.DealTicket))
-                .Select(t => t.DealTicket).ToListAsync()).ToHashSet();
-            var existingBalOps = (await db.BalanceOperations.Where(b => b.AccountId == acc.Id && tickets.Contains(b.DealTicket))
-                .Select(b => b.DealTicket).ToListAsync()).ToHashSet();
+            // Load existing rows as entities so re-sent deals UPDATE their financial fields
+            // (e.g. a corrected commission after an EA fix) instead of being skipped. This
+            // makes a ForceBackfill self-healing rather than a no-op for already-stored deals.
+            var existingTrades = await db.Trades.Where(t => t.AccountId == acc.Id && tickets.Contains(t.DealTicket))
+                .ToDictionaryAsync(t => t.DealTicket);
+            var existingBalOps = await db.BalanceOperations.Where(b => b.AccountId == acc.Id && tickets.Contains(b.DealTicket))
+                .ToDictionaryAsync(b => b.DealTicket);
 
             var skipped = 0;
             foreach (var d in batch.Deals)
             {
                 if (d.Type == "balance")
                 {
-                    if (existingBalOps.Contains(d.DealTicket)) continue;
-                    db.BalanceOperations.Add(new BalanceOperation
+                    if (!existingBalOps.TryGetValue(d.DealTicket, out var bal))
                     {
-                        AccountId = acc.Id, DealTicket = d.DealTicket, Amount = d.GrossProfit,
-                        TimeUtc = DateTime.SpecifyKind(d.CloseTimeUtc, DateTimeKind.Utc), Comment = d.Comment ?? ""
-                    });
-                    existingBalOps.Add(d.DealTicket);
+                        bal = new BalanceOperation { AccountId = acc.Id, DealTicket = d.DealTicket };
+                        db.BalanceOperations.Add(bal);
+                        existingBalOps[d.DealTicket] = bal;
+                    }
+                    bal.Amount = d.GrossProfit;
+                    bal.TimeUtc = DateTime.SpecifyKind(d.CloseTimeUtc, DateTimeKind.Utc);
+                    bal.Comment = d.Comment ?? "";
                 }
                 else if (d.Type is "buy" or "sell")
                 {
-                    if (existingTrades.Contains(d.DealTicket)) continue;
-                    db.Trades.Add(new Trade
+                    if (!existingTrades.TryGetValue(d.DealTicket, out var trade))
                     {
-                        AccountId = acc.Id, DealTicket = d.DealTicket, PositionId = d.PositionId,
-                        Symbol = d.Symbol, Direction = d.Type, Lots = d.Lots,
-                        OpenPrice = d.OpenPrice, ClosePrice = d.ClosePrice,
-                        OpenTimeUtc = DateTime.SpecifyKind(d.OpenTimeUtc, DateTimeKind.Utc),
-                        CloseTimeUtc = DateTime.SpecifyKind(d.CloseTimeUtc, DateTimeKind.Utc),
-                        GrossProfit = d.GrossProfit, Commission = d.Commission, Swap = d.Swap,
-                        NetProfit = d.GrossProfit + d.Commission + d.Swap,
-                        MagicNumber = d.MagicNumber, Comment = d.Comment ?? ""
-                    });
-                    existingTrades.Add(d.DealTicket);
+                        trade = new Trade { AccountId = acc.Id, DealTicket = d.DealTicket, Symbol = d.Symbol, Direction = d.Type };
+                        db.Trades.Add(trade);
+                        existingTrades[d.DealTicket] = trade;
+                    }
+                    trade.PositionId = d.PositionId;
+                    trade.Symbol = d.Symbol; trade.Direction = d.Type; trade.Lots = d.Lots;
+                    trade.OpenPrice = d.OpenPrice; trade.ClosePrice = d.ClosePrice;
+                    trade.OpenTimeUtc = DateTime.SpecifyKind(d.OpenTimeUtc, DateTimeKind.Utc);
+                    trade.CloseTimeUtc = DateTime.SpecifyKind(d.CloseTimeUtc, DateTimeKind.Utc);
+                    trade.GrossProfit = d.GrossProfit; trade.Commission = d.Commission; trade.Swap = d.Swap;
+                    trade.NetProfit = d.GrossProfit + d.Commission + d.Swap;
+                    trade.MagicNumber = d.MagicNumber; trade.Comment = d.Comment ?? "";
                 }
                 else
                 {

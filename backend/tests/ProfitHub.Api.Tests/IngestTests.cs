@@ -28,6 +28,28 @@ public class IngestTests(ApiFactory f) : IClassFixture<ApiFactory>
     };
 
     [Fact]
+    public async Task Resending_a_deal_updates_its_financial_fields()
+    {
+        var (client, acc) = Setup();
+        client.DefaultRequestHeaders.Add("X-Ingest-Key", acc.IngestKey);
+        // First ingest: commission -1.2 → net = 10 + (-1.2) = 8.8
+        await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { Deal(1, profit: 10m) } });
+        // Re-ingest the same ticket with a corrected (fuller) commission -2.4 → net = 7.6
+        await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { new {
+            dealTicket = 1L, positionId = 1L, symbol = "XAUUSD.PRO", type = "buy",
+            lots = 0.26m, openPrice = 4499.46m, closePrice = 4500.02m,
+            openTimeUtc = "2026-05-28T03:00:00Z", closeTimeUtc = "2026-05-28T03:06:00Z",
+            grossProfit = 10m, commission = -2.4m, swap = 0m, magicNumber = 20231L, comment = "QQ"
+        } } });
+        using var scope0 = _f.Services.CreateScope();
+        var db0 = scope0.ServiceProvider.GetRequiredService<AppDbContext>();
+        var trade = db0.Trades.Single(t => t.AccountId == acc.Id && t.DealTicket == 1);
+        Assert.Equal(-2.4m, trade.Commission); // updated, not skipped
+        Assert.Equal(7.6m, trade.NetProfit);   // recomputed
+        Assert.Equal(1, db0.Trades.Count(t => t.AccountId == acc.Id)); // still one row
+    }
+
+    [Fact]
     public async Task Resending_same_deals_does_not_duplicate()
     {
         var (client, acc) = Setup();
