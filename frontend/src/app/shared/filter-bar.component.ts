@@ -60,7 +60,7 @@ import { FilterService, AccountInfo } from '../core/filter.service';
                     <lucide-icon [img]="icons.Check" class="h-3 w-3 text-white"></lucide-icon>
                   }
                 </span>
-                <span class="truncate">{{ a.name || a.accountNumber }}</span>
+                <span class="truncate tabular-nums">{{ a.accountNumber }}</span>
               </label>
             } @empty {
               <div class="px-2 py-2 text-xs text-text-faint">No accounts.</div>
@@ -69,18 +69,18 @@ import { FilterService, AccountInfo } from '../core/filter.service';
         }
       </div>
 
-      <!-- EA select -->
+      <!-- EA (account by name) select -->
       <div class="flex flex-col gap-1">
         <span class="text-xs font-medium text-text-muted">EA</span>
         <div class="relative">
           <select
-            [ngModel]="filter.magic()"
-            (ngModelChange)="setMagic($event)"
+            [ngModel]="selectedAccountId()"
+            (ngModelChange)="selectByName($event)"
             class="h-9 min-w-[9rem] appearance-none rounded-md border border-border bg-surface-raised pl-3 pr-8 text-sm text-text transition-colors hover:bg-border focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
             <option [ngValue]="null">All EAs</option>
-            @for (ea of eas; track ea.magicNumber) {
-              <option [ngValue]="ea.magicNumber">{{ ea.name }}</option>
+            @for (a of filter.accounts(); track a.id) {
+              <option [ngValue]="a.id">{{ a.name || a.accountNumber }}</option>
             }
           </select>
           <lucide-icon
@@ -127,7 +127,6 @@ import { FilterService, AccountInfo } from '../core/filter.service';
 })
 export class FilterBarComponent implements OnInit {
   @Output() changed = new EventEmitter<void>();
-  eas: { magicNumber: number; name: string }[] = [];
   open = signal(false);
   readonly icons = { SlidersHorizontal, Calendar, ChevronDown, Check };
 
@@ -136,7 +135,6 @@ export class FilterBarComponent implements OnInit {
   async ngOnInit() {
     if (!this.filter.accounts().length)
       this.filter.accounts.set(await firstValueFrom(this.api.get<AccountInfo[]>('/api/accounts')));
-    this.eas = await firstValueFrom(this.api.get<{ magicNumber: number; name: string }[]>('/api/summary/by-ea'));
   }
 
   /** Close the accounts popover when clicking outside the toolbar. */
@@ -151,7 +149,15 @@ export class FilterBarComponent implements OnInit {
     this.filter.selectedIds.set(ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
     this.changed.emit();
   }
-  setMagic(m: number | null) { this.filter.magic.set(m); this.changed.emit(); }
+  /** The "EA" select is an account picker by name; it reflects a single selected account. */
+  selectedAccountId(): string | null {
+    const ids = this.filter.selectedIds();
+    return ids.length === 1 ? ids[0] : null;
+  }
+  selectByName(id: string | null) {
+    this.filter.selectedIds.set(id ? [id] : []);
+    this.changed.emit();
+  }
   label() {
     const n = this.filter.selectedIds().length;
     return n === 0 ? 'All accounts' : `${n} selected`;
