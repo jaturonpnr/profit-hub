@@ -1,14 +1,15 @@
 //+------------------------------------------------------------------+
 //| ProfitHubCollector.mq5                                           |
 //| Pushes closed deals to Profit Hub. Read-only; never trades.      |
-//| Attach to ONE chart per terminal. Whitelist ApiUrl in            |
-//| Tools > Options > Expert Advisors > Allow WebRequest.            |
+//| Attach to ONE blank chart per terminal (high timeframe e.g. MN,  |
+//| no indicators) to keep RAM/CPU footprint minimal next to trading  |
+//| EAs. Whitelist ApiUrl in Tools > Options > Expert Advisors.        |
 //+------------------------------------------------------------------+
 #property strict
 
 input string ApiUrl        = "https://profit-hub-service.onrender.com"; // Profit Hub API base URL
 input string IngestKey     = "e1b219c564647ca388dcf059ddaaccec7113ed6c8caeabbc";                               // per-account Ingest Key
-input int    IntervalSec   = 300;                              // push every N seconds (1-5 min)
+input int    IntervalSec   = 900;                              // push every N seconds (recommend 600-900 = 10-15 min on a shared VPS)
 input int    BatchSize     = 100;                              // deals per HTTP request (max 1000)
 input bool   ForceBackfill = false;                            // tick ONCE to re-send ALL history, then untick & re-attach
 
