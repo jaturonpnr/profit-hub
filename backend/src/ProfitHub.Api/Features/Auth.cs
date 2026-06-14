@@ -40,14 +40,21 @@ public static class Auth
             var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
             if (user is null || !BCrypt.Net.BCrypt.Verify(c.Password, user.PasswordHash))
                 return Results.Unauthorized();
-            var token = new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
-                claims: [new Claim("sub", user.Id.ToString()), new Claim("tz", user.TimeZone), new Claim("email", user.Email)],
-                expires: DateTime.UtcNow.AddDays(30),
-                signingCredentials: new SigningCredentials(
-                    new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)), SecurityAlgorithms.HmacSha256)));
-            return Results.Ok(new { token });
+            return Results.Ok(new { token = BuildToken(user, jwt) });
         });
     }
+
+    /// <summary>
+    /// Builds a signed JWT carrying sub/tz/email claims with a 30-day expiry.
+    /// Shared by login and the timezone-update endpoint so the issued token always
+    /// reflects the user's current TimeZone (read by Reports.Tz via the "tz" claim).
+    /// </summary>
+    public static string BuildToken(User user, JwtSettings jwt) =>
+        new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
+            claims: [new Claim("sub", user.Id.ToString()), new Claim("tz", user.TimeZone), new Claim("email", user.Email)],
+            expires: DateTime.UtcNow.AddDays(30),
+            signingCredentials: new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)), SecurityAlgorithms.HmacSha256)));
 
     public static Guid UserId(this ClaimsPrincipal p) =>
         Guid.Parse(p.FindFirstValue("sub") ?? p.FindFirstValue(ClaimTypes.NameIdentifier)!);
