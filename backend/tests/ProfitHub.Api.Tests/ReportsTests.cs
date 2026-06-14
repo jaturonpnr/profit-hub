@@ -103,6 +103,33 @@ public class ReportsTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.Equal(2, row.TradeCount);
     }
 
+    public record EaListRow(long MagicNumber, string Name, string AccountName, decimal NetProfit, int TradeCount);
+
+    [Fact]
+    public async Task Eas_lists_one_row_per_magic_with_account_name()
+    {
+        var (client, accId) = await SeedAsync();
+        using (var scope = _f.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Trades.Add(new Trade { AccountId = accId, DealTicket = 1, Symbol = "XAUUSD", Direction = "buy",
+                CloseTimeUtc = DateTime.Parse("2026-05-10T10:00:00Z").ToUniversalTime(), NetProfit = 10m, MagicNumber = 20231 });
+            db.Trades.Add(new Trade { AccountId = accId, DealTicket = 2, Symbol = "XAUUSD", Direction = "buy",
+                CloseTimeUtc = DateTime.Parse("2026-05-11T10:00:00Z").ToUniversalTime(), NetProfit = 5m, MagicNumber = 0 });
+            db.SaveChanges();
+        }
+        // name a magic, leave the other unnamed
+        await client.PutAsJsonAsync("/api/ea-names/0", new { name = "Manual" });
+
+        var rows = await client.GetFromJsonAsync<EaListRow[]>("/api/eas");
+        Assert.Equal(2, rows!.Length);
+        var manual = rows.Single(r => r.MagicNumber == 0);
+        Assert.Equal("Manual", manual.Name);
+        Assert.Equal("A", manual.AccountName);
+        var unnamed = rows.Single(r => r.MagicNumber == 20231);
+        Assert.Equal("", unnamed.Name); // empty → frontend shows magic as placeholder
+    }
+
     [Fact]
     public async Task Invalid_accountIds_returns_400()
     {
