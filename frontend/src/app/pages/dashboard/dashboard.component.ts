@@ -6,6 +6,7 @@ import {
   ApexDataLabels, ApexGrid, ApexXAxis, ApexYAxis, ApexTooltip, ApexMarkers,
 } from 'ng-apexcharts';
 import { ApiService } from '../../core/api.service';
+import { AuthService } from '../../core/auth.service';
 import { FilterService } from '../../core/filter.service';
 import { FilterBarComponent } from '../../shared/filter-bar.component';
 import {
@@ -157,7 +158,7 @@ export class DashboardComponent implements OnInit {
   eas = signal<EaRow[]>([]);
   today = signal(0); week = signal(0); month = signal(0); allTime = signal(0);
 
-  constructor(private api: ApiService, private filter: FilterService) {}
+  constructor(private api: ApiService, private filter: FilterService, private auth: AuthService) {}
   async ngOnInit() { await this.reload(); }
 
   /**
@@ -245,15 +246,13 @@ export class DashboardComponent implements OnInit {
 
   /**
    * Compute the periodStart keys ("yyyy-MM-dd") for the current week and month in
-   * Asia/Bangkok, matching how the backend buckets weekly/monthly summary rows.
-   * Weeks bucket to the ISO Monday of the week; months bucket to the 1st.
-   * NOTE: timezone is hardcoded to Asia/Bangkok pending the authenticated user's
-   * own timezone claim — only correct while that timezone is Asia/Bangkok.
+   * the user's reporting timezone, matching how the backend buckets weekly/monthly
+   * summary rows. Weeks bucket to the ISO Monday of the week; months bucket to the 1st.
    */
   private currentPeriodKeys(): { weekStr: string; monthStr: string } {
-    // en-CA / sv-SE both yield yyyy-MM-dd; parse Bangkok-local today into y/m/d.
+    // en-CA / sv-SE both yield yyyy-MM-dd; parse tz-local today into y/m/d.
     const [y, m, d] = new Date()
-      .toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+      .toLocaleDateString('en-CA', { timeZone: this.auth.timeZone })
       .split('-')
       .map(Number);
     // Anchor at UTC midnight so weekday/date arithmetic is timezone-agnostic.
@@ -276,11 +275,10 @@ export class DashboardComponent implements OnInit {
       firstValueFrom(this.api.get<EaRow[]>('/api/summary/by-ea', p)),
     ]);
     this.days.set(days); this.eas.set(eas);
-    // The backend buckets summary rows in the user's configured timezone (defaults to
-    // Asia/Bangkok). We hardcode Asia/Bangkok here to derive "today" so the lookup matches
-    // those local-date periodStart values. TODO: this should ideally use the authenticated
-    // user's own timezone — it is only correct while that timezone is Asia/Bangkok.
-    const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' });
+    // The backend buckets summary rows in the user's configured timezone (the `tz`
+    // JWT claim). We derive "today" in that same timezone so the lookup matches those
+    // local-date periodStart values.
+    const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: this.auth.timeZone });
     const { weekStr, monthStr } = this.currentPeriodKeys();
     this.today.set(days.find(d => d.periodStart === todayStr)?.netProfit ?? 0);
     this.week.set(weeks.find(w => w.periodStart === weekStr)?.netProfit ?? 0);

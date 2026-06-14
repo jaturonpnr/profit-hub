@@ -16,4 +16,33 @@ export class AuthService {
     await this.login(email, password);
   }
   logout() { localStorage.removeItem('ph_token'); this.token.set(null); }
+
+  /** Store a replacement JWT (e.g. after a timezone change re-issues a token). */
+  setToken(token: string) {
+    localStorage.setItem('ph_token', token);
+    this.token.set(token);
+  }
+
+  /** The reporting timezone from the JWT `tz` claim (defaults to Asia/Bangkok). */
+  get timeZone(): string {
+    try {
+      const t = this.token();
+      if (!t) return 'Asia/Bangkok';
+      const payload = JSON.parse(atob(t.split('.')[1] || ''));
+      return payload.tz || 'Asia/Bangkok';
+    } catch {
+      return 'Asia/Bangkok';
+    }
+  }
+
+  getMe() {
+    return firstValueFrom(this.api.get<{ email: string; timeZone: string }>('/api/me'));
+  }
+
+  async setTimeZone(timeZone: string): Promise<void> {
+    const res = await firstValueFrom(
+      this.api.put<{ token: string }>('/api/me/timezone', { timeZone }),
+    );
+    this.setToken(res.token);
+  }
 }

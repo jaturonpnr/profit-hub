@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: profit-hub-api
+    name: profit-hub-service
     runtime: docker
     plan: free
     healthCheckPath: /health
