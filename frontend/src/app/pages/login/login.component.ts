@@ -49,7 +49,7 @@ import { UiButtonComponent, UiCardComponent } from '../../shared/ui';
                   type="email"
                   autocomplete="email"
                   placeholder="you@example.com"
-                  class="w-full h-10 rounded-md bg-surface-raised border border-border pl-9 pr-3 text-sm text-text
+                  class="w-full h-10 rounded-md bg-surface-raised border border-border pl-10 pr-3 text-sm text-text
                          placeholder:text-text-faint transition-colors
                          focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
                 />
@@ -67,7 +67,7 @@ import { UiButtonComponent, UiCardComponent } from '../../shared/ui';
                   type="password"
                   autocomplete="current-password"
                   placeholder="••••••••"
-                  class="w-full h-10 rounded-md bg-surface-raised border border-border pl-9 pr-3 text-sm text-text
+                  class="w-full h-10 rounded-md bg-surface-raised border border-border pl-10 pr-3 text-sm text-text
                          placeholder:text-text-faint transition-colors
                          focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
                 />
