@@ -133,15 +133,25 @@ public static class Reports
             return Results.BadRequest(new { error = "invalid accountIds" });
         var names = await db.EaNames.Where(e => e.UserId == user.UserId())
             .ToDictionaryAsync(e => e.MagicNumber, e => e.Name);
+        var accountNames = await db.Accounts.Where(a => a.UserId == user.UserId())
+            .ToDictionaryAsync(a => a.Id, a => a.Name);
         var trades = await Filtered(db, user, ids, from, to, null, Tz(user))
-            .Select(t => new { t.MagicNumber, t.NetProfit }).ToListAsync();
+            .Select(t => new { t.MagicNumber, t.NetProfit, t.AccountId }).ToListAsync();
         var rows = trades.GroupBy(t => t.MagicNumber)
-            .Select(grp => new
+            .Select(grp =>
             {
-                magicNumber = grp.Key,
-                name = names.GetValueOrDefault(grp.Key, grp.Key.ToString()),
-                netProfit = grp.Sum(t => t.NetProfit),
-                tradeCount = grp.Count()
+                // Name priority: explicit EA name → owning account's name (1 account = 1 EA) → magic number.
+                var accName = accountNames.GetValueOrDefault(grp.First().AccountId, "");
+                var name = names.TryGetValue(grp.Key, out var ea) ? ea
+                         : !string.IsNullOrWhiteSpace(accName) ? accName
+                         : grp.Key.ToString();
+                return new
+                {
+                    magicNumber = grp.Key,
+                    name,
+                    netProfit = grp.Sum(t => t.NetProfit),
+                    tradeCount = grp.Count()
+                };
             })
             .OrderByDescending(r => r.netProfit);
         return Results.Ok(rows);
