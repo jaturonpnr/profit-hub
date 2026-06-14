@@ -79,6 +79,19 @@ public class ReportsTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.DoesNotContain(3L, tickets);
     }
 
+    public record EaRow(long MagicNumber, string Name, decimal NetProfit, int TradeCount);
+
+    [Fact]
+    public async Task ByEa_falls_back_to_account_name_when_ea_is_unnamed()
+    {
+        // SeedAsync creates an account named "A" with MagicNumber=1 trades, no EaName set.
+        var (client, accId) = await SeedAsync((1, "2026-05-10T10:00:00Z", 10m));
+        var rows = await client.GetFromJsonAsync<EaRow[]>($"/api/summary/by-ea?accountIds={accId}");
+        var row = Assert.Single(rows!);
+        Assert.Equal("A", row.Name); // account name, not the magic number "1"
+        Assert.Equal(1, row.MagicNumber);
+    }
+
     [Fact]
     public async Task Invalid_accountIds_returns_400()
     {
