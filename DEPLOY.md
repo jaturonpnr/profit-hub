@@ -24,8 +24,8 @@ Render (Docker), and the Angular frontend on Vercel.
 
 ## Notes
 
-- The API service is named `profit-hub-api` in `render.yaml`, which produces the
-  URL `https://profit-hub-api.onrender.com`. This matches
+- The API service is named `profit-hub-service` in `render.yaml`, which produces the
+  URL `https://profit-hub-service.onrender.com`. This matches
   `frontend/src/environments/environment.ts` (`apiUrl`).
 - Render free-tier services sleep when idle; the first request after a sleep may
   take a few seconds.
