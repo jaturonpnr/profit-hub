@@ -6,10 +6,11 @@
 //+------------------------------------------------------------------+
 #property strict
 
-input string ApiUrl        = "https://your-api.onrender.com"; // Profit Hub API base URL
-input string IngestKey     = "";                               // per-account Ingest Key
-input int    IntervalSec   = 120;                              // push every N seconds (1-5 min)
+input string ApiUrl        = "https://profit-hub-service.onrender.com"; // Profit Hub API base URL
+input string IngestKey     = "e1b219c564647ca388dcf059ddaaccec7113ed6c8caeabbc";                               // per-account Ingest Key
+input int    IntervalSec   = 300;                              // push every N seconds (1-5 min)
 input int    BatchSize     = 100;                              // deals per HTTP request (max 1000)
+input bool   ForceBackfill = false;                            // tick ONCE to re-send ALL history, then untick & re-attach
 
 string GV_LAST;   // global variable name persisting last pushed deal time
 int    g_batch;   // effective batch size (clamped to backend limit)
@@ -18,6 +19,11 @@ int OnInit()
 {
    if(StringLen(IngestKey) == 0) { Print("ProfitHub: IngestKey is empty"); return INIT_PARAMETERS_INCORRECT; }
    GV_LAST = "PH_LAST_" + (string)AccountInfoInteger(ACCOUNT_LOGIN);
+   if(ForceBackfill && GlobalVariableCheck(GV_LAST))
+   {
+      GlobalVariableDel(GV_LAST); // reset watermark -> next cycle re-fetches from 0 (full history); backend dedupes
+      Print("ProfitHub: ForceBackfill — watermark reset; re-sending full history. Untick ForceBackfill afterwards.");
+   }
    g_batch = (int)MathMax(1, MathMin(BatchSize, 1000)); // backend rejects >1000 deals per request
    EventSetTimer((int)MathMax(60, IntervalSec));
    return INIT_SUCCEEDED;
@@ -29,7 +35,10 @@ void OnTimer()
 {
    // Delta fetch: from last successfully pushed deal time (0 on first run = full backfill)
    datetime from = (datetime)(GlobalVariableCheck(GV_LAST) ? GlobalVariableGet(GV_LAST) : 0);
-   if(!HistorySelect(from + 1, TimeCurrent())) return;
+   // Upper bound = current SERVER time + 1h buffer. Do NOT use TimeCurrent():
+   // it returns the chart symbol's last-tick time, which lags real time on quiet
+   // symbols / weekends and would silently exclude recently closed deals.
+   if(!HistorySelect(from + 1, TimeTradeServer() + 3600)) return;
 
    int total = HistoryDealsTotal();
 
