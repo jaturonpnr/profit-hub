@@ -12,6 +12,39 @@ public static class Reports
         g.MapGet("/trades", GetTrades);
         g.MapGet("/summary", GetSummary);
         g.MapGet("/summary/by-account", GetByAccount);
+        g.MapGet("/eas", GetEas);
+    }
+
+    // Lists every EA (magic number) found in the user's trades, with its owning account
+    // and lifetime stats. Used by the EAs management page (rename via PUT /api/ea-names).
+    private static async Task<IResult> GetEas(ClaimsPrincipal user, AppDbContext db)
+    {
+        var names = await db.EaNames.Where(e => e.UserId == user.UserId())
+            .ToDictionaryAsync(e => e.MagicNumber, e => e.Name);
+        var accounts = await db.Accounts.Where(a => a.UserId == user.UserId())
+            .ToDictionaryAsync(a => a.Id, a => new { a.Name, a.AccountNumber });
+        var myAccountIds = accounts.Keys.ToHashSet();
+        var trades = await db.Trades.Where(t => myAccountIds.Contains(t.AccountId))
+            .Select(t => new { t.MagicNumber, t.AccountId, t.NetProfit }).ToListAsync();
+        var rows = trades.GroupBy(t => t.MagicNumber)
+            .Select(grp =>
+            {
+                var distinctAccounts = grp.Select(t => t.AccountId).Distinct().Count();
+                var acc = accounts.GetValueOrDefault(grp.First().AccountId);
+                var accountName = distinctAccounts > 1
+                    ? "Multiple"
+                    : (acc is not null && !string.IsNullOrWhiteSpace(acc.Name) ? acc.Name : acc?.AccountNumber.ToString() ?? "");
+                return new
+                {
+                    magicNumber = grp.Key,
+                    name = names.GetValueOrDefault(grp.Key, ""), // empty = unnamed; frontend shows magic as placeholder
+                    accountName,
+                    netProfit = grp.Sum(t => t.NetProfit),
+                    tradeCount = grp.Count()
+                };
+            })
+            .OrderByDescending(r => r.netProfit);
+        return Results.Ok(rows);
     }
 
     internal static bool TryParseAccountIds(string? accountIds, out Guid[] ids)

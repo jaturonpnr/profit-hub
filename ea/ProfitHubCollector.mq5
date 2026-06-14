@@ -99,6 +99,13 @@ void OnTimer()
    for(int j = 0; j < count; j++)
    {
       double openPrice = 0; datetime openTime = times[j];
+      // Commission/swap/fee from the closing deal (captured in pass 1) only cover the
+      // exit leg. Brokers that charge per side also bill the ENTRY leg, so add the
+      // entry deals' costs here — otherwise net profit overstates vs MT5.
+      // (Edge case: a position closed by several partial OUT deals would add the entry
+      //  cost to each; rare for full-close grid EAs.)
+      double commission = commissions[j] + HistoryDealGetDouble(tickets[j], DEAL_FEE);
+      double swap       = swaps[j];
       if(typeStrs[j] != "balance" && HistorySelectByPosition(posIds[j]))
       {
          int n = HistoryDealsTotal();
@@ -106,8 +113,13 @@ void OnTimer()
          {
             ulong tk = HistoryDealGetTicket(k);
             if(HistoryDealGetInteger(tk, DEAL_ENTRY) == DEAL_ENTRY_IN)
-            { openPrice = HistoryDealGetDouble(tk, DEAL_PRICE);
-              openTime = (datetime)HistoryDealGetInteger(tk, DEAL_TIME); break; }
+            {
+               if(openPrice == 0)
+               { openPrice = HistoryDealGetDouble(tk, DEAL_PRICE);
+                 openTime = (datetime)HistoryDealGetInteger(tk, DEAL_TIME); }
+               commission += HistoryDealGetDouble(tk, DEAL_COMMISSION) + HistoryDealGetDouble(tk, DEAL_FEE);
+               swap       += HistoryDealGetDouble(tk, DEAL_SWAP);
+            }
          }
       }
 
@@ -121,7 +133,7 @@ void OnTimer()
         tickets[j], posIds[j], EscapeJson(symbols[j]), typeStrs[j],
         lots[j], openPrice, closes[j],
         ToIsoUtc(openTime), ToIsoUtc(times[j]),
-        profits[j], commissions[j], swaps[j],
+        profits[j], commission, swap,
         magics[j], EscapeJson(comments[j]));
    }
 
