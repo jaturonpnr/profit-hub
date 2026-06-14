@@ -1,6 +1,6 @@
 import { Component, computed, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { LucideAngularModule, LayoutDashboard, TrendingUp, Wallet, LogOut } from 'lucide-angular';
+import { LucideAngularModule, LayoutDashboard, TrendingUp, Wallet, LogOut, Settings } from 'lucide-angular';
 import { AuthService } from '../core/auth.service';
 import { UiButtonComponent } from '../shared/ui';
 
@@ -93,6 +93,7 @@ export class ShellComponent {
     { path: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
     { path: '/trades', label: 'Trades', icon: TrendingUp, exact: false },
     { path: '/accounts', label: 'Accounts', icon: Wallet, exact: false },
+    { path: '/settings', label: 'Settings', icon: Settings, exact: false },
   ];
 
   // Decode the email from the JWT in localStorage if available.
