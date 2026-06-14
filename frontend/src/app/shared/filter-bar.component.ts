@@ -96,13 +96,13 @@ import { FilterService, AccountInfo } from '../core/filter.service';
         <div class="relative">
           <lucide-icon
             [img]="icons.Calendar"
-            class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint"
+            class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint"
           ></lucide-icon>
           <input
             type="date"
             [ngModel]="filter.from()"
             (ngModelChange)="filter.from.set($event); changed.emit()"
-            class="h-9 rounded-md border border-border bg-surface-raised pl-8 pr-3 text-sm text-text transition-colors hover:bg-border focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 [color-scheme:dark]"
+            class="h-9 rounded-md border border-border bg-surface-raised pl-10 pr-3 text-sm text-text transition-colors hover:bg-border focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 [color-scheme:dark]"
           />
         </div>
       </div>
@@ -112,13 +112,13 @@ import { FilterService, AccountInfo } from '../core/filter.service';
         <div class="relative">
           <lucide-icon
             [img]="icons.Calendar"
-            class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint"
+            class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-faint"
           ></lucide-icon>
           <input
             type="date"
             [ngModel]="filter.to()"
             (ngModelChange)="filter.to.set($event); changed.emit()"
-            class="h-9 rounded-md border border-border bg-surface-raised pl-8 pr-3 text-sm text-text transition-colors hover:bg-border focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 [color-scheme:dark]"
+            class="h-9 rounded-md border border-border bg-surface-raised pl-10 pr-3 text-sm text-text transition-colors hover:bg-border focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 [color-scheme:dark]"
           />
         </div>
       </div>
