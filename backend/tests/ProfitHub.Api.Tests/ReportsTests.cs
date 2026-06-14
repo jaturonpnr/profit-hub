@@ -79,17 +79,28 @@ public class ReportsTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.DoesNotContain(3L, tickets);
     }
 
-    public record EaRow(long MagicNumber, string Name, decimal NetProfit, int TradeCount);
+    public record AccountRow(Guid AccountId, string Name, long AccountNumber, decimal NetProfit, int TradeCount);
 
     [Fact]
-    public async Task ByEa_falls_back_to_account_name_when_ea_is_unnamed()
+    public async Task ByAccount_groups_all_magics_under_one_account_row()
     {
-        // SeedAsync creates an account named "A" with MagicNumber=1 trades, no EaName set.
-        var (client, accId) = await SeedAsync((1, "2026-05-10T10:00:00Z", 10m));
-        var rows = await client.GetFromJsonAsync<EaRow[]>($"/api/summary/by-ea?accountIds={accId}");
-        var row = Assert.Single(rows!);
-        Assert.Equal("A", row.Name); // account name, not the magic number "1"
-        Assert.Equal(1, row.MagicNumber);
+        // SeedAsync makes account "A". Add two trades with DIFFERENT magic numbers on it
+        // (e.g. EA magic + a manual magic 0) — By-Account must collapse them into ONE row.
+        var (client, accId) = await SeedAsync();
+        using (var scope = _f.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Trades.Add(new Trade { AccountId = accId, DealTicket = 1, Symbol = "XAUUSD", Direction = "buy",
+                CloseTimeUtc = DateTime.Parse("2026-05-10T10:00:00Z").ToUniversalTime(), NetProfit = 10m, MagicNumber = 20231 });
+            db.Trades.Add(new Trade { AccountId = accId, DealTicket = 2, Symbol = "XAUUSD", Direction = "buy",
+                CloseTimeUtc = DateTime.Parse("2026-05-11T10:00:00Z").ToUniversalTime(), NetProfit = 5m, MagicNumber = 0 });
+            db.SaveChanges();
+        }
+        var rows = await client.GetFromJsonAsync<AccountRow[]>($"/api/summary/by-account?accountIds={accId}");
+        var row = Assert.Single(rows!); // one account row, not two magic rows
+        Assert.Equal("A", row.Name);
+        Assert.Equal(15m, row.NetProfit);
+        Assert.Equal(2, row.TradeCount);
     }
 
     [Fact]

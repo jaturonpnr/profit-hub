@@ -11,7 +11,7 @@ public static class Reports
         var g = app.MapGroup("/api").RequireAuthorization();
         g.MapGet("/trades", GetTrades);
         g.MapGet("/summary", GetSummary);
-        g.MapGet("/summary/by-ea", GetByEa);
+        g.MapGet("/summary/by-account", GetByAccount);
     }
 
     internal static bool TryParseAccountIds(string? accountIds, out Guid[] ids)
@@ -126,29 +126,26 @@ public static class Reports
         return Results.Ok(rows);
     }
 
-    private static async Task<IResult> GetByEa(ClaimsPrincipal user, AppDbContext db,
+    private static async Task<IResult> GetByAccount(ClaimsPrincipal user, AppDbContext db,
         string? accountIds, DateTime? from, DateTime? to)
     {
         if (!TryParseAccountIds(accountIds, out var ids))
             return Results.BadRequest(new { error = "invalid accountIds" });
-        var names = await db.EaNames.Where(e => e.UserId == user.UserId())
-            .ToDictionaryAsync(e => e.MagicNumber, e => e.Name);
-        var accountNames = await db.Accounts.Where(a => a.UserId == user.UserId())
-            .ToDictionaryAsync(a => a.Id, a => a.Name);
+        var accounts = await db.Accounts.Where(a => a.UserId == user.UserId())
+            .ToDictionaryAsync(a => a.Id, a => new { a.Name, a.AccountNumber });
         var trades = await Filtered(db, user, ids, from, to, null, Tz(user))
-            .Select(t => new { t.MagicNumber, t.NetProfit, t.AccountId }).ToListAsync();
-        var rows = trades.GroupBy(t => t.MagicNumber)
+            .Select(t => new { t.AccountId, t.NetProfit }).ToListAsync();
+        var rows = trades.GroupBy(t => t.AccountId)
             .Select(grp =>
             {
-                // Name priority: explicit EA name → owning account's name (1 account = 1 EA) → magic number.
-                var accName = accountNames.GetValueOrDefault(grp.First().AccountId, "");
-                var name = names.TryGetValue(grp.Key, out var ea) ? ea
-                         : !string.IsNullOrWhiteSpace(accName) ? accName
-                         : grp.Key.ToString();
+                var acc = accounts.GetValueOrDefault(grp.Key);
+                var name = acc is not null && !string.IsNullOrWhiteSpace(acc.Name)
+                    ? acc.Name : acc?.AccountNumber.ToString() ?? grp.Key.ToString();
                 return new
                 {
-                    magicNumber = grp.Key,
+                    accountId = grp.Key,
                     name,
+                    accountNumber = acc?.AccountNumber ?? 0,
                     netProfit = grp.Sum(t => t.NetProfit),
                     tradeCount = grp.Count()
                 };

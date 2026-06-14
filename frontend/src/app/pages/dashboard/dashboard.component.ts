@@ -14,7 +14,7 @@ import {
 } from '../../shared/ui';
 
 interface SummaryRow { periodStart: string; netProfit: number; tradeCount: number; wins: number; }
-interface EaRow { magicNumber: number; name: string; netProfit: number; tradeCount: number; }
+interface AccountRow { accountId: string; name: string; accountNumber: number; netProfit: number; tradeCount: number; }
 
 /**
  * Dashboard — 4 stat cards (Today / Week / Month / All-time) with count-up +
@@ -23,7 +23,7 @@ interface EaRow { magicNumber: number; name: string; netProfit: number; tradeCou
  *
  * Presentation only. All data logic is preserved verbatim: reload() and its
  * Promise.all fetches, currentPeriodKeys(), the Bangkok-tz card lookups, the
- * today/week/month/allTime signals, the days()/eas() signals, and the
+ * today/week/month/allTime signals, the days()/byAccount() signals, and the
  * <ph-filter-bar (changed)="reload()"> wiring. The chart data prep (reverse to
  * ascending + cumulative sum) is reused; only the render target changed to an
  * ApexCharts area chart with series bound via signals.
@@ -119,18 +119,18 @@ interface EaRow { magicNumber: number; name: string; netProfit: number; tradeCou
         </div>
 
         <div class="flex flex-col gap-3">
-          <h2 class="text-sm font-medium text-text-muted">By EA</h2>
+          <h2 class="text-sm font-medium text-text-muted">By Account</h2>
           <ui-table dense>
             <table>
               <thead>
                 <tr>
-                  <th>EA</th>
+                  <th>Account</th>
                   <th class="!text-right">Net</th>
                   <th class="!text-right">Trades</th>
                 </tr>
               </thead>
               <tbody>
-                @for (r of eas(); track r.magicNumber) {
+                @for (r of byAccount(); track r.accountId) {
                   <tr>
                     <td>
                       <ui-badge variant="brand">{{ r.name }}</ui-badge>
@@ -155,7 +155,7 @@ interface EaRow { magicNumber: number; name: string; netProfit: number; tradeCou
 })
 export class DashboardComponent implements OnInit {
   days = signal<SummaryRow[]>([]);
-  eas = signal<EaRow[]>([]);
+  byAccount = signal<AccountRow[]>([]);
   today = signal(0); week = signal(0); month = signal(0); allTime = signal(0);
 
   constructor(private api: ApiService, private filter: FilterService, private auth: AuthService) {}
@@ -268,13 +268,13 @@ export class DashboardComponent implements OnInit {
 
   async reload() {
     const p = this.filter.queryParams();
-    const [days, weeks, months, eas] = await Promise.all([
+    const [days, weeks, months, byAccount] = await Promise.all([
       firstValueFrom(this.api.get<SummaryRow[]>('/api/summary', { ...p, period: 'day' })),
       firstValueFrom(this.api.get<SummaryRow[]>('/api/summary', { ...p, period: 'week' })),
       firstValueFrom(this.api.get<SummaryRow[]>('/api/summary', { ...p, period: 'month' })),
-      firstValueFrom(this.api.get<EaRow[]>('/api/summary/by-ea', p)),
+      firstValueFrom(this.api.get<AccountRow[]>('/api/summary/by-account', p)),
     ]);
-    this.days.set(days); this.eas.set(eas);
+    this.days.set(days); this.byAccount.set(byAccount);
     // The backend buckets summary rows in the user's configured timezone (the `tz`
     // JWT claim). We derive "today" in that same timezone so the lookup matches those
     // local-date periodStart values.
