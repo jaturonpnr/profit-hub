@@ -8,7 +8,7 @@ import {
 } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
 import { FilterService, AccountInfo } from '../../core/filter.service';
-import { UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent } from '../../shared/ui';
+import { UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent, UiSpinnerComponent } from '../../shared/ui';
 
 type EaStatus = 'live' | 'stale' | 'never';
 
@@ -23,7 +23,7 @@ type EaStatus = 'live' | 'stale' | 'never';
 @Component({
   selector: 'ph-accounts',
   standalone: true,
-  imports: [FormsModule, DatePipe, LucideAngularModule, UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent],
+  imports: [FormsModule, DatePipe, LucideAngularModule, UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent, UiSpinnerComponent],
   template: `
     <div class="animate-fade-in flex flex-col gap-6">
       <!-- Header -->
@@ -39,6 +39,9 @@ type EaStatus = 'live' | 'stale' | 'never';
       </div>
 
       <!-- Accounts table -->
+      @if (loading()) {
+        <ui-spinner label="Loading accounts…" />
+      } @else {
       <ui-table dense>
         <table>
           <thead>
@@ -128,6 +131,7 @@ type EaStatus = 'live' | 'stale' | 'never';
           </tbody>
         </table>
       </ui-table>
+      }
     </div>
 
     <!-- Copied toast -->
@@ -211,6 +215,7 @@ type EaStatus = 'live' | 'stale' | 'never';
 export class AccountsComponent implements OnInit {
   num = 0; name = ''; broker = '';
   copied = signal(false);
+  loading = signal(true);
   showAdd = signal(false);
   revealed = signal(new Set<string>());
   readonly icons = { Plus, Trash2, Copy, Check, Eye, EyeOff, Wifi, WifiOff, Clock, X };
@@ -220,6 +225,7 @@ export class AccountsComponent implements OnInit {
   async ngOnInit() { await this.reload(); }
   async reload() {
     this.filter.accounts.set(await firstValueFrom(this.api.get<AccountInfo[]>('/api/accounts')));
+    this.loading.set(false);
   }
   async add() {
     await firstValueFrom(this.api.post('/api/accounts', { accountNumber: this.num, name: this.name, broker: this.broker }));

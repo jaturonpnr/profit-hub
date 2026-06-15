@@ -10,7 +10,7 @@ import { AuthService } from '../../core/auth.service';
 import { FilterService } from '../../core/filter.service';
 import { FilterBarComponent } from '../../shared/filter-bar.component';
 import {
-  UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent,
+  UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent, UiSpinnerComponent,
 } from '../../shared/ui';
 
 interface SummaryRow { periodStart: string; netProfit: number; tradeCount: number; wins: number; }
@@ -33,7 +33,7 @@ interface AccountRow { accountId: string; name: string; accountNumber: number; n
   standalone: true,
   imports: [
     FilterBarComponent, DecimalPipe, NgApexchartsModule,
-    UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent,
+    UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent, UiSpinnerComponent,
   ],
   template: `
     <div class="animate-fade-in flex flex-col gap-6">
@@ -44,6 +44,9 @@ interface AccountRow { accountId: string; name: string; accountNumber: number; n
 
       <ph-filter-bar (changed)="reload()" />
 
+      @if (loading()) {
+        <ui-spinner label="Loading dashboard…" />
+      } @else {
       <!-- Stat cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <ui-stat-card label="Today" [value]="today()" [series]="dailySpark()" [secondary]="thb(today())" />
@@ -150,6 +153,7 @@ interface AccountRow { accountId: string; name: string; accountNumber: number; n
           </ui-table>
         </div>
       </div>
+      }
     </div>
   `,
 })
@@ -158,6 +162,7 @@ export class DashboardComponent implements OnInit {
   byAccount = signal<AccountRow[]>([]);
   today = signal(0); week = signal(0); month = signal(0); allTime = signal(0);
   fxRate = signal<number | null>(null); // USD→THB; null = hide THB line
+  loading = signal(true); // spinner until the first load resolves
 
   constructor(private api: ApiService, private filter: FilterService, private auth: AuthService) {}
   async ngOnInit() {
@@ -297,5 +302,6 @@ export class DashboardComponent implements OnInit {
     this.week.set(weeks.find(w => w.periodStart === weekStr)?.netProfit ?? 0);
     this.month.set(months.find(m => m.periodStart === monthStr)?.netProfit ?? 0);
     this.allTime.set(days.reduce((s, d) => s + d.netProfit, 0));
+    this.loading.set(false);
   }
 }

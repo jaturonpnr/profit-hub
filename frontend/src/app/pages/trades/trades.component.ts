@@ -11,7 +11,7 @@ import { environment } from '../../../environments/environment';
 import { ApiService } from '../../core/api.service';
 import { FilterService } from '../../core/filter.service';
 import { FilterBarComponent } from '../../shared/filter-bar.component';
-import { UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent } from '../../shared/ui';
+import { UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent, UiSpinnerComponent } from '../../shared/ui';
 
 interface Trade {
   symbol: string; direction: string; lots: number; openPrice: number; closePrice: number;
@@ -34,7 +34,7 @@ interface Trade {
   standalone: true,
   imports: [
     FilterBarComponent, FormsModule, DatePipe, DecimalPipe, LucideAngularModule,
-    UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent,
+    UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent, UiSpinnerComponent,
   ],
   template: `
     <div class="animate-fade-in flex flex-col gap-6">
@@ -71,7 +71,9 @@ interface Trade {
 
       <!-- Trades table -->
       <ui-card [padded]="false">
-        @if (total() === 0) {
+        @if (loading()) {
+          <ui-spinner label="Loading trades…" />
+        } @else if (total() === 0) {
           <div class="flex flex-col items-center justify-center gap-3 py-16 text-center">
             <div class="flex h-12 w-12 items-center justify-center rounded-full bg-surface-raised border border-border">
               <lucide-icon [img]="icons.Inbox" class="h-5 w-5 text-text-faint"></lucide-icon>
@@ -153,6 +155,7 @@ export class TradesComponent implements OnInit {
 
   trades = signal<Trade[]>([]);
   page = signal(1); total = signal(0);
+  loading = signal(true);
   summaryPeriod = 'day';
   constructor(private api: ApiService, private filter: FilterService, private http: HttpClient) {}
 
@@ -163,6 +166,7 @@ export class TradesComponent implements OnInit {
     const res = await firstValueFrom(this.api.get<{ total: number; items: Trade[] }>(
       '/api/trades', { ...this.filter.queryParams(), page: String(page) }));
     this.trades.set(res.items); this.total.set(res.total);
+    this.loading.set(false);
   }
   async exportCsv(file: string, extra: Record<string, string>) {
     // The auth interceptor is registered globally, so this HttpClient.get is sent with the
