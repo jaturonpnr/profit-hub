@@ -34,6 +34,10 @@ import {
         [class.text-loss]="value < 0"
       >{{ display() | number:'1.2-2' }}</b>
 
+      @if (secondary) {
+        <span class="text-xs tabular-nums text-text-muted leading-none">{{ secondary }}</span>
+      }
+
       <div class="absolute bottom-0 left-0 right-0 h-12 opacity-90 pointer-events-none">
         <apx-chart
           [series]="[{ name: label, data: series }]"
@@ -52,6 +56,8 @@ export class UiStatCardComponent implements OnChanges, OnDestroy {
   @Input() value = 0;
   /** Tiny numeric series for the sparkline (caller-derived, no fetch). */
   @Input() series: number[] = [];
+  /** Optional muted secondary line under the value (e.g. THB conversion). */
+  @Input() secondary = '';
 
   /** Animated display value for the count-up tween. */
   readonly display = signal(0);

@@ -32,6 +32,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 builder.Services.AddAuthorization();
+builder.Services.AddHttpClient();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.WithOrigins(builder.Configuration["Cors:Origins"]?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) ?? ["http://localhost:4200"])
      .AllowAnyHeader().AllowAnyMethod()));

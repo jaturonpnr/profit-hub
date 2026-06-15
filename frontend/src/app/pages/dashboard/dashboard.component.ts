@@ -46,10 +46,10 @@ interface AccountRow { accountId: string; name: string; accountNumber: number; n
 
       <!-- Stat cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <ui-stat-card label="Today" [value]="today()" [series]="dailySpark()" />
-        <ui-stat-card label="This week" [value]="week()" [series]="dailySpark()" />
-        <ui-stat-card label="This month" [value]="month()" [series]="dailySpark()" />
-        <ui-stat-card label="All time" [value]="allTime()" [series]="cumulativeSpark()" />
+        <ui-stat-card label="Today" [value]="today()" [series]="dailySpark()" [secondary]="thb(today())" />
+        <ui-stat-card label="This week" [value]="week()" [series]="dailySpark()" [secondary]="thb(week())" />
+        <ui-stat-card label="This month" [value]="month()" [series]="dailySpark()" [secondary]="thb(month())" />
+        <ui-stat-card label="All time" [value]="allTime()" [series]="cumulativeSpark()" [secondary]="thb(allTime())" />
       </div>
 
       <!-- Cumulative P/L area chart -->
@@ -157,9 +157,22 @@ export class DashboardComponent implements OnInit {
   days = signal<SummaryRow[]>([]);
   byAccount = signal<AccountRow[]>([]);
   today = signal(0); week = signal(0); month = signal(0); allTime = signal(0);
+  fxRate = signal<number | null>(null); // USD→THB; null = hide THB line
 
   constructor(private api: ApiService, private filter: FilterService, private auth: AuthService) {}
-  async ngOnInit() { await this.reload(); }
+  async ngOnInit() {
+    // FX rate is global and independent of the trade filters — fetch once.
+    firstValueFrom(this.api.get<{ rate: number | null }>('/api/fx'))
+      .then(fx => this.fxRate.set(fx.rate)).catch(() => this.fxRate.set(null));
+    await this.reload();
+  }
+
+  /** Format a USD amount as an approximate THB line, or '' when no rate is available. */
+  thb(usd: number): string {
+    const r = this.fxRate();
+    if (r == null) return '';
+    return '≈ ฿' + (usd * r).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
 
   /**
    * Ascending daily rows (reverse of the descending API order). Shared by the
