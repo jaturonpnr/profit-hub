@@ -11,11 +11,31 @@ export class AuthService {
     localStorage.setItem('ph_token', res.token);
     this.token.set(res.token);
   }
-  async register(email: string, password: string) {
-    await firstValueFrom(this.api.post('/api/auth/register', { email, password }));
-    await this.login(email, password);
-  }
   logout() { localStorage.removeItem('ph_token'); this.token.set(null); }
+
+  /** Whether the signed-in user is an admin, decoded from the JWT `isAdmin` claim. */
+  get isAdmin(): boolean {
+    try {
+      const t = this.token();
+      if (!t) return false;
+      const payload = JSON.parse(atob(t.split('.')[1] || ''));
+      return payload.isAdmin === 'true' || payload.isAdmin === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** The signed-in user's email from the JWT `email` claim ('' if not signed in). */
+  get email(): string {
+    try {
+      const t = this.token();
+      if (!t) return '';
+      const payload = JSON.parse(atob(t.split('.')[1] || ''));
+      return payload.email || payload.sub || '';
+    } catch {
+      return '';
+    }
+  }
 
   /** Store a replacement JWT (e.g. after a timezone change re-issues a token). */
   setToken(token: string) {

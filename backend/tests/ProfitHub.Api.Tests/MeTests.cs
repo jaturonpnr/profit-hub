@@ -10,12 +10,7 @@ public class MeTests(ApiFactory f) : IClassFixture<ApiFactory>
     [Fact]
     public async Task Get_me_returns_email_and_default_timezone()
     {
-        var client = f.CreateClient();
-        var email = Guid.NewGuid() + "@x.com";
-        await client.PostAsJsonAsync("/api/auth/register", new { email, password = "secret123" });
-        var login = await client.PostAsJsonAsync("/api/auth/login", new { email, password = "secret123" });
-        var token = (await login.Content.ReadFromJsonAsync<Dictionary<string, string>>())!["token"];
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var (client, email) = await AuthedClient.CreateWithEmail(f);
 
         var res = await client.GetAsync("/api/me");
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
