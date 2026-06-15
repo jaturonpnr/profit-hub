@@ -62,3 +62,13 @@ public class EaName
     public long MagicNumber { get; set; }
     public required string Name { get; set; }
 }
+
+/// Single global row holding the USD→THB exchange rate config (not per-user).
+/// OverrideRate, when set, wins over the cached live rate.
+public class FxConfig
+{
+    public int Id { get; set; } = 1;          // singleton row
+    public decimal? OverrideRate { get; set; } // manual pin; null = use live
+    public decimal? LiveRate { get; set; }     // last fetched THB per 1 USD
+    public DateTime? LiveRateFetchedAtUtc { get; set; }
+}

@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Trade> Trades => Set<Trade>();
     public DbSet<BalanceOperation> BalanceOperations => Set<BalanceOperation>();
     public DbSet<EaName> EaNames => Set<EaName>();
+    public DbSet<FxConfig> FxConfigs => Set<FxConfig>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
