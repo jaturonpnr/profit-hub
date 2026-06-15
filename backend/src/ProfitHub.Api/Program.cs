@@ -5,6 +5,9 @@ using Microsoft.IdentityModel.Tokens;
 using ProfitHub.Api.Domain;
 using ProfitHub.Api.Infrastructure;
 
+// QuestPDF Community license — must be set before the first PDF render or it throws.
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(o =>

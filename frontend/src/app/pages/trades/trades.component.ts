@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import {
-  LucideAngularModule, Download, ChevronLeft, ChevronRight,
+  LucideAngularModule, Download, FileDown, FileText, ChevronLeft, ChevronRight,
   ArrowUp, ArrowDown, Inbox,
 } from 'lucide-angular';
 import { environment } from '../../../environments/environment';
@@ -58,13 +58,21 @@ interface Trade {
             <option value="week">Weekly</option>
             <option value="month">Monthly</option>
           </select>
-          <button uiButton variant="primary" (click)="exportCsv('trades.csv', {})">
+          <button uiButton variant="primary" (click)="download('trades.csv', {})">
             <lucide-icon [img]="icons.Download" class="h-4 w-4"></lucide-icon>
             Export trades
           </button>
-          <button uiButton variant="secondary" (click)="exportCsv('summary.csv', { period: summaryPeriod })">
+          <button uiButton variant="secondary" (click)="download('summary.csv', { period: summaryPeriod })">
             <lucide-icon [img]="icons.Download" class="h-4 w-4"></lucide-icon>
             Export summary
+          </button>
+          <button uiButton variant="secondary" (click)="download('workbook.xlsx', { period: summaryPeriod })">
+            <lucide-icon [img]="icons.FileDown" class="h-4 w-4"></lucide-icon>
+            Excel
+          </button>
+          <button uiButton variant="secondary" (click)="download('report.pdf', {})">
+            <lucide-icon [img]="icons.FileText" class="h-4 w-4"></lucide-icon>
+            PDF
           </button>
         </div>
       </div>
@@ -151,7 +159,7 @@ interface Trade {
   `,
 })
 export class TradesComponent implements OnInit {
-  readonly icons = { Download, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Inbox };
+  readonly icons = { Download, FileDown, FileText, ChevronLeft, ChevronRight, ArrowUp, ArrowDown, Inbox };
 
   trades = signal<Trade[]>([]);
   page = signal(1); total = signal(0);
@@ -168,10 +176,13 @@ export class TradesComponent implements OnInit {
     this.trades.set(res.items); this.total.set(res.total);
     this.loading.set(false);
   }
-  async exportCsv(file: string, extra: Record<string, string>) {
-    // The auth interceptor is registered globally, so this HttpClient.get is sent with the
-    // Bearer token even though we pass the full absolute URL (the CSV endpoints require auth,
-    // and a token cannot be attached to a plain <a href> download).
+  /**
+   * Blob-download any /api/export/* artifact (CSV, xlsx, PDF) with the current filters.
+   * The auth interceptor is registered globally, so this HttpClient.get is sent with the
+   * Bearer token even though we pass the full absolute URL (the export endpoints require
+   * auth, and a token cannot be attached to a plain <a href> download).
+   */
+  async download(file: string, extra: Record<string, string>) {
     const params = new URLSearchParams({ ...this.filter.queryParams(), ...extra });
     const blob = await firstValueFrom(this.http.get(
       `${environment.apiUrl}/api/export/${file}?${params}`, { responseType: 'blob' }));

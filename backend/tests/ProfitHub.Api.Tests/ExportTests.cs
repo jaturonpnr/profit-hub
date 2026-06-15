@@ -49,4 +49,47 @@ public class ExportTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.Equal(2, lines.Length);
         Assert.Equal("2026-06-01,8.25,2,1,50.0%", lines[1]);
     }
+
+    private async Task<HttpClient> SeedClientWithData()
+    {
+        var client = await AuthedClient.Create(_f);
+        var res = await client.PostAsJsonAsync("/api/accounts", new { accountNumber = 333, name = "Rich", broker = "" });
+        var acc = await res.Content.ReadFromJsonAsync<AccountsTests.AccountDto>();
+        using var scope = _f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.BalanceOperations.Add(new BalanceOperation { AccountId = acc!.Id, DealTicket = 1, Amount = 1000m, TimeUtc = DateTime.UtcNow });
+        db.Trades.Add(new Trade { AccountId = acc.Id, DealTicket = 1, Symbol = "XAUUSD", Direction = "buy",
+            CloseTimeUtc = new DateTime(2026, 6, 1, 10, 0, 0, DateTimeKind.Utc), NetProfit = 10.5m, MagicNumber = 1 });
+        db.Trades.Add(new Trade { AccountId = acc.Id, DealTicket = 2, Symbol = "XAUUSD", Direction = "sell",
+            CloseTimeUtc = new DateTime(2026, 6, 2, 11, 0, 0, DateTimeKind.Utc), NetProfit = -2.25m, MagicNumber = 1 });
+        db.SaveChanges();
+        return client;
+    }
+
+    [Fact]
+    public async Task Report_pdf_returns_pdf_bytes()
+    {
+        var client = await SeedClientWithData();
+        var res = await client.GetAsync("/api/export/report.pdf");
+        res.EnsureSuccessStatusCode();
+        Assert.Equal("application/pdf", res.Content.Headers.ContentType!.MediaType);
+        var bytes = await res.Content.ReadAsByteArrayAsync();
+        Assert.True(bytes.Length > 1000);
+        // %PDF magic header.
+        Assert.Equal("%PDF"u8.ToArray(), bytes.Take(4).ToArray());
+    }
+
+    [Fact]
+    public async Task Workbook_xlsx_returns_zip_bytes()
+    {
+        var client = await SeedClientWithData();
+        var res = await client.GetAsync("/api/export/workbook.xlsx?period=day");
+        res.EnsureSuccessStatusCode();
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            res.Content.Headers.ContentType!.MediaType);
+        var bytes = await res.Content.ReadAsByteArrayAsync();
+        Assert.True(bytes.Length > 1000);
+        // PK zip magic header (xlsx is a zip archive).
+        Assert.Equal("PK"u8.ToArray(), bytes.Take(2).ToArray());
+    }
 }

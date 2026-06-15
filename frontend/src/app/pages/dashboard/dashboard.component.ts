@@ -1,16 +1,20 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { LucideAngularModule, FileDown } from 'lucide-angular';
 import {
   NgApexchartsModule, ApexChart, ApexAxisChartSeries, ApexFill, ApexStroke,
   ApexDataLabels, ApexGrid, ApexXAxis, ApexYAxis, ApexTooltip, ApexMarkers,
 } from 'ng-apexcharts';
+import { environment } from '../../../environments/environment';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { FilterService } from '../../core/filter.service';
 import { FilterBarComponent } from '../../shared/filter-bar.component';
 import {
   UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent, UiSpinnerComponent,
+  UiButtonComponent,
 } from '../../shared/ui';
 
 interface SummaryRow { periodStart: string; netProfit: number; tradeCount: number; wins: number; }
@@ -33,14 +37,21 @@ interface BalanceRow { accountId: string; name: string; accountNumber: number; n
   selector: 'ph-dashboard',
   standalone: true,
   imports: [
-    FilterBarComponent, DecimalPipe, NgApexchartsModule,
+    FilterBarComponent, DecimalPipe, NgApexchartsModule, LucideAngularModule,
     UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent, UiSpinnerComponent,
+    UiButtonComponent,
   ],
   template: `
     <div class="animate-fade-in flex flex-col gap-6">
-      <div>
-        <h1 class="text-xl font-semibold tracking-tight">Dashboard</h1>
-        <p class="text-sm text-text-muted mt-0.5">Realised P/L across your accounts.</p>
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-semibold tracking-tight">Dashboard</h1>
+          <p class="text-sm text-text-muted mt-0.5">Realised P/L across your accounts.</p>
+        </div>
+        <button uiButton variant="secondary" (click)="downloadReport()">
+          <lucide-icon [img]="icons.FileDown" class="h-4 w-4"></lucide-icon>
+          Download report (PDF)
+        </button>
       </div>
 
       <ph-filter-bar (changed)="reload()" />
@@ -183,8 +194,26 @@ export class DashboardComponent implements OnInit {
   roiPct = signal<number | null>(null); // null → "—" (net deposits ≤ 0)
   fxRate = signal<number | null>(null); // USD→THB; null = hide THB line
   loading = signal(true); // spinner until the first load resolves
+  readonly icons = { FileDown };
 
-  constructor(private api: ApiService, private filter: FilterService, private auth: AuthService) {}
+  constructor(
+    private api: ApiService, private filter: FilterService,
+    private auth: AuthService, private http: HttpClient,
+  ) {}
+
+  /**
+   * Blob-download the summary PDF report with the current dashboard filters.
+   * The global auth interceptor attaches the Bearer token (a plain <a href>
+   * download cannot carry one), so we fetch as a blob and trigger the download.
+   */
+  async downloadReport() {
+    const params = new URLSearchParams(this.filter.queryParams());
+    const blob = await firstValueFrom(this.http.get(
+      `${environment.apiUrl}/api/export/report.pdf?${params}`, { responseType: 'blob' }));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'report.pdf'; a.click();
+    URL.revokeObjectURL(a.href);
+  }
   async ngOnInit() {
     // FX rate is global and independent of the trade filters — fetch once.
     firstValueFrom(this.api.get<{ rate: number | null }>('/api/fx'))
