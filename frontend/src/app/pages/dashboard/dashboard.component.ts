@@ -1,20 +1,25 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { LucideAngularModule, FileDown } from 'lucide-angular';
 import {
   NgApexchartsModule, ApexChart, ApexAxisChartSeries, ApexFill, ApexStroke,
   ApexDataLabels, ApexGrid, ApexXAxis, ApexYAxis, ApexTooltip, ApexMarkers,
 } from 'ng-apexcharts';
+import { environment } from '../../../environments/environment';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { FilterService } from '../../core/filter.service';
 import { FilterBarComponent } from '../../shared/filter-bar.component';
 import {
   UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent, UiSpinnerComponent,
+  UiButtonComponent,
 } from '../../shared/ui';
 
 interface SummaryRow { periodStart: string; netProfit: number; tradeCount: number; wins: number; }
 interface AccountRow { accountId: string; name: string; accountNumber: number; netProfit: number; tradeCount: number; }
+interface BalanceRow { accountId: string; name: string; accountNumber: number; netDeposits: number; netProfit: number; balance: number; roi: number | null; }
 
 /**
  * Dashboard — 4 stat cards (Today / Week / Month / All-time) with count-up +
@@ -32,14 +37,21 @@ interface AccountRow { accountId: string; name: string; accountNumber: number; n
   selector: 'ph-dashboard',
   standalone: true,
   imports: [
-    FilterBarComponent, DecimalPipe, NgApexchartsModule,
+    FilterBarComponent, DecimalPipe, NgApexchartsModule, LucideAngularModule,
     UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent, UiSpinnerComponent,
+    UiButtonComponent,
   ],
   template: `
     <div class="animate-fade-in flex flex-col gap-6">
-      <div>
-        <h1 class="text-xl font-semibold tracking-tight">Dashboard</h1>
-        <p class="text-sm text-text-muted mt-0.5">Realised P/L across your accounts.</p>
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-semibold tracking-tight">Dashboard</h1>
+          <p class="text-sm text-text-muted mt-0.5">Realised P/L across your accounts.</p>
+        </div>
+        <button uiButton variant="secondary" (click)="downloadReport()">
+          <lucide-icon [img]="icons.FileDown" class="h-4 w-4"></lucide-icon>
+          Download report (PDF)
+        </button>
       </div>
 
       <ph-filter-bar (changed)="reload()" />
@@ -53,6 +65,22 @@ interface AccountRow { accountId: string; name: string; accountNumber: number; n
         <ui-stat-card label="This week" [value]="week()" [series]="dailySpark()" [secondary]="thb(week())" />
         <ui-stat-card label="This month" [value]="month()" [series]="dailySpark()" [secondary]="thb(month())" />
         <ui-stat-card label="All time" [value]="allTime()" [series]="cumulativeSpark()" [secondary]="thb(allTime())" />
+
+        <!-- Balance: lifetime (ignores date filter), respects account filter. Net deposits + realized P/L. -->
+        <ui-stat-card label="Balance" [value]="balance()" [series]="[]" [secondary]="thb(balance())" />
+
+        <!-- ROI: lifetime; custom card because ui-stat-card can't render "%" or a "—" placeholder. -->
+        <div
+          class="relative overflow-hidden rounded-lg bg-surface border border-border p-4 flex flex-col gap-2"
+          [style.boxShadow]="'var(--shadow-card), var(--ring-glass)'"
+        >
+          <span class="text-xs font-medium uppercase tracking-wide text-text-muted">ROI</span>
+          <b
+            class="text-2xl font-semibold tabular-nums leading-none"
+            [class.text-profit]="roiPct() != null && roiPct()! >= 0"
+            [class.text-loss]="roiPct() != null && roiPct()! < 0"
+          >{{ roiPct() != null ? (roiPct() | number:'1.2-2') + '%' : '—' }}</b>
+        </div>
       </div>
 
       <!-- Cumulative P/L area chart -->
@@ -161,10 +189,31 @@ export class DashboardComponent implements OnInit {
   days = signal<SummaryRow[]>([]);
   byAccount = signal<AccountRow[]>([]);
   today = signal(0); week = signal(0); month = signal(0); allTime = signal(0);
+  // Lifetime aggregates from /api/balances (ignore date filter, respect account filter).
+  balance = signal(0);
+  roiPct = signal<number | null>(null); // null → "—" (net deposits ≤ 0)
   fxRate = signal<number | null>(null); // USD→THB; null = hide THB line
   loading = signal(true); // spinner until the first load resolves
+  readonly icons = { FileDown };
 
-  constructor(private api: ApiService, private filter: FilterService, private auth: AuthService) {}
+  constructor(
+    private api: ApiService, private filter: FilterService,
+    private auth: AuthService, private http: HttpClient,
+  ) {}
+
+  /**
+   * Blob-download the summary PDF report with the current dashboard filters.
+   * The global auth interceptor attaches the Bearer token (a plain <a href>
+   * download cannot carry one), so we fetch as a blob and trigger the download.
+   */
+  async downloadReport() {
+    const params = new URLSearchParams(this.filter.queryParams());
+    const blob = await firstValueFrom(this.http.get(
+      `${environment.apiUrl}/api/export/report.pdf?${params}`, { responseType: 'blob' }));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'report.pdf'; a.click();
+    URL.revokeObjectURL(a.href);
+  }
   async ngOnInit() {
     // FX rate is global and independent of the trade filters — fetch once.
     firstValueFrom(this.api.get<{ rate: number | null }>('/api/fx'))
@@ -286,13 +335,23 @@ export class DashboardComponent implements OnInit {
 
   async reload() {
     const p = this.filter.queryParams();
-    const [days, weeks, months, byAccount] = await Promise.all([
+    // Balance/ROI are lifetime: pass only the account filter, never from/to.
+    const balParams: Record<string, string> = {};
+    if (p['accountIds']) balParams['accountIds'] = p['accountIds'];
+    const [days, weeks, months, byAccount, balances] = await Promise.all([
       firstValueFrom(this.api.get<SummaryRow[]>('/api/summary', { ...p, period: 'day' })),
       firstValueFrom(this.api.get<SummaryRow[]>('/api/summary', { ...p, period: 'week' })),
       firstValueFrom(this.api.get<SummaryRow[]>('/api/summary', { ...p, period: 'month' })),
       firstValueFrom(this.api.get<AccountRow[]>('/api/summary/by-account', p)),
+      firstValueFrom(this.api.get<BalanceRow[]>('/api/balances', balParams)),
     ]);
     this.days.set(days); this.byAccount.set(byAccount);
+    // Aggregate lifetime balance & ROI across the selected accounts.
+    const totalBalance = balances.reduce((s, r) => s + r.balance, 0);
+    const totalDeposits = balances.reduce((s, r) => s + r.netDeposits, 0);
+    const totalProfit = balances.reduce((s, r) => s + r.netProfit, 0);
+    this.balance.set(totalBalance);
+    this.roiPct.set(totalDeposits > 0 ? (totalProfit / totalDeposits) * 100 : null);
     // The backend buckets summary rows in the user's configured timezone (the `tz`
     // JWT claim). We derive "today" in that same timezone so the lookup matches those
     // local-date periodStart values.

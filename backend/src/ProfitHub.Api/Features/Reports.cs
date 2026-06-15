@@ -12,7 +12,51 @@ public static class Reports
         g.MapGet("/trades", GetTrades);
         g.MapGet("/summary", GetSummary);
         g.MapGet("/summary/by-account", GetByAccount);
+        g.MapGet("/balances", GetBalances);
         g.MapGet("/eas", GetEas);
+    }
+
+    // Lifetime Balance & ROI per account derived from deposits/withdrawals + realized P/L.
+    // NOT date-filtered: respects only the account filter and user ownership.
+    //   netDeposits = Σ BalanceOperations.Amount (deposits +, withdrawals −)
+    //   netProfit   = Σ Trades.NetProfit
+    //   balance     = netDeposits + netProfit (mirrors MT5 Balance)
+    //   roi         = netDeposits > 0 ? netProfit/netDeposits*100 : null ("—" in UI)
+    private static async Task<IResult> GetBalances(ClaimsPrincipal user, AppDbContext db, string? accountIds)
+    {
+        if (!TryParseAccountIds(accountIds, out var ids))
+            return Results.BadRequest(new { error = "invalid accountIds" });
+        var accountsQ = db.Accounts.Where(a => a.UserId == user.UserId());
+        if (ids.Length > 0) accountsQ = accountsQ.Where(a => ids.Contains(a.Id));
+        var accounts = await accountsQ
+            .Select(a => new { a.Id, a.Name, a.AccountNumber }).ToListAsync();
+        var myIds = accounts.Select(a => a.Id).ToHashSet();
+        var deposits = await db.BalanceOperations.Where(b => myIds.Contains(b.AccountId))
+            .Select(b => new { b.AccountId, b.Amount }).ToListAsync();
+        var trades = await db.Trades.Where(t => myIds.Contains(t.AccountId))
+            .Select(t => new { t.AccountId, t.NetProfit }).ToListAsync();
+        var depByAcc = deposits.GroupBy(d => d.AccountId).ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+        var profByAcc = trades.GroupBy(t => t.AccountId).ToDictionary(g => g.Key, g => g.Sum(x => x.NetProfit));
+        var rows = accounts
+            .Select(a =>
+            {
+                var netDeposits = depByAcc.GetValueOrDefault(a.Id, 0m);
+                var netProfit = profByAcc.GetValueOrDefault(a.Id, 0m);
+                var name = !string.IsNullOrWhiteSpace(a.Name) ? a.Name : a.AccountNumber.ToString();
+                return new
+                {
+                    accountId = a.Id,
+                    name,
+                    accountNumber = a.AccountNumber,
+                    netDeposits,
+                    netProfit,
+                    balance = netDeposits + netProfit,
+                    roi = netDeposits > 0 ? (decimal?)Math.Round(netProfit / netDeposits * 100, 2) : null
+                };
+            })
+            .OrderByDescending(r => r.balance)
+            .ToList();
+        return Results.Ok(rows);
     }
 
     // Lists every EA (magic number) found in the user's trades, with its owning account

@@ -130,6 +130,64 @@ public class ReportsTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.Equal("", unnamed.Name); // empty → frontend shows magic as placeholder
     }
 
+    public record BalanceRow(Guid AccountId, string Name, long AccountNumber,
+        decimal NetDeposits, decimal NetProfit, decimal Balance, decimal? Roi);
+
+    [Fact]
+    public async Task Balances_compute_net_deposits_profit_balance_and_roi()
+    {
+        // Account A: deposit 1000 + trades netting 300 → balance 1300, roi 30.
+        // Account B: trades only, no deposit → roi null.
+        var client = await AuthedClient.Create(_f);
+        var resA = await client.PostAsJsonAsync("/api/accounts", new { accountNumber = 111, name = "A", broker = "" });
+        var accA = (await resA.Content.ReadFromJsonAsync<AccountsTests.AccountDto>())!.Id;
+        var resB = await client.PostAsJsonAsync("/api/accounts", new { accountNumber = 222, name = "B", broker = "" });
+        var accB = (await resB.Content.ReadFromJsonAsync<AccountsTests.AccountDto>())!.Id;
+        using (var scope = _f.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.BalanceOperations.Add(new BalanceOperation { AccountId = accA, DealTicket = 1, Amount = 1000m, TimeUtc = DateTime.UtcNow });
+            db.Trades.Add(new Trade { AccountId = accA, DealTicket = 1, Symbol = "XAUUSD", Direction = "buy",
+                CloseTimeUtc = DateTime.Parse("2026-05-10T10:00:00Z").ToUniversalTime(), NetProfit = 200m, MagicNumber = 1 });
+            db.Trades.Add(new Trade { AccountId = accA, DealTicket = 2, Symbol = "XAUUSD", Direction = "buy",
+                CloseTimeUtc = DateTime.Parse("2026-05-11T10:00:00Z").ToUniversalTime(), NetProfit = 100m, MagicNumber = 1 });
+            db.Trades.Add(new Trade { AccountId = accB, DealTicket = 3, Symbol = "XAUUSD", Direction = "buy",
+                CloseTimeUtc = DateTime.Parse("2026-05-12T10:00:00Z").ToUniversalTime(), NetProfit = 50m, MagicNumber = 1 });
+            db.SaveChanges();
+        }
+        var rows = await client.GetFromJsonAsync<BalanceRow[]>("/api/balances");
+        Assert.Equal(2, rows!.Length);
+        var a = rows.Single(r => r.AccountId == accA);
+        Assert.Equal(1000m, a.NetDeposits);
+        Assert.Equal(300m, a.NetProfit);
+        Assert.Equal(1300m, a.Balance);
+        Assert.Equal(30m, a.Roi);
+        var b = rows.Single(r => r.AccountId == accB);
+        Assert.Equal(0m, b.NetDeposits);
+        Assert.Equal(50m, b.NetProfit);
+        Assert.Equal(50m, b.Balance);
+        Assert.Null(b.Roi); // ROI undefined when net deposits ≤ 0
+        // Ordered by balance desc.
+        Assert.Equal(accA, rows[0].AccountId);
+    }
+
+    [Fact]
+    public async Task Balances_do_not_leak_other_users_accounts()
+    {
+        var other = await AuthedClient.Create(_f);
+        var resO = await other.PostAsJsonAsync("/api/accounts", new { accountNumber = 999, name = "Other", broker = "" });
+        var accO = (await resO.Content.ReadFromJsonAsync<AccountsTests.AccountDto>())!.Id;
+        using (var scope = _f.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.BalanceOperations.Add(new BalanceOperation { AccountId = accO, DealTicket = 1, Amount = 5000m, TimeUtc = DateTime.UtcNow });
+            db.SaveChanges();
+        }
+        var mine = await AuthedClient.Create(_f);
+        var rows = await mine.GetFromJsonAsync<BalanceRow[]>("/api/balances");
+        Assert.Empty(rows!);
+    }
+
     [Fact]
     public async Task Invalid_accountIds_returns_400()
     {
