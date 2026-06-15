@@ -1,6 +1,6 @@
 import { Component, computed, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { LucideAngularModule, LayoutDashboard, TrendingUp, Wallet, LogOut, Settings, Bot } from 'lucide-angular';
+import { LucideAngularModule, LayoutDashboard, TrendingUp, Wallet, LogOut, Settings, Bot, ShieldCheck } from 'lucide-angular';
 import { AuthService } from '../core/auth.service';
 import { UiButtonComponent } from '../shared/ui';
 
@@ -31,7 +31,7 @@ import { UiButtonComponent } from '../shared/ui';
 
         <!-- Nav -->
         <nav class="flex-1 px-3 py-4 flex flex-col gap-1">
-          @for (item of navItems; track item.path) {
+          @for (item of navItems(); track item.path) {
             <a
               [routerLink]="item.path"
               [routerLinkActiveOptions]="{ exact: item.exact }"
@@ -89,13 +89,15 @@ import { UiButtonComponent } from '../shared/ui';
 })
 export class ShellComponent {
   readonly icons = { TrendingUp, LogOut };
-  readonly navItems = [
+  // Users is admin-only — shown only when the JWT carries isAdmin=true.
+  readonly navItems = computed(() => [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
     { path: '/trades', label: 'Trades', icon: TrendingUp, exact: false },
     { path: '/accounts', label: 'Accounts', icon: Wallet, exact: false },
     { path: '/eas', label: 'EAs', icon: Bot, exact: false },
+    ...(this.auth.isAdmin ? [{ path: '/users', label: 'Users', icon: ShieldCheck, exact: false }] : []),
     { path: '/settings', label: 'Settings', icon: Settings, exact: false },
-  ];
+  ]);
 
   // Decode the email from the JWT in localStorage if available.
   private readonly _email = signal<string>(this.decodeEmail());

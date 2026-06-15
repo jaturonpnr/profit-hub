@@ -1,14 +1,13 @@
 import { Component, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { LucideAngularModule, TrendingUp, Mail, Lock, LogIn, UserPlus, AlertCircle } from 'lucide-angular';
+import { LucideAngularModule, TrendingUp, Mail, Lock, LogIn, AlertCircle } from 'lucide-angular';
 import { AuthService } from '../../core/auth.service';
 import { UiButtonComponent, UiCardComponent } from '../../shared/ui';
 
 /**
  * Login — centered auth card on a subtle violet aurora dark background.
- * Presentation only: email/password fields, error signal, submit(register)
- * and navigation are preserved verbatim.
+ * Sign-in only — public registration was removed (admin-managed users).
  */
 @Component({
   selector: 'ph-login',
@@ -37,7 +36,7 @@ import { UiButtonComponent, UiCardComponent } from '../../shared/ui';
         </div>
 
         <ui-card>
-          <form class="flex flex-col gap-4" (ngSubmit)="submit(false)">
+          <form class="flex flex-col gap-4" (ngSubmit)="submit()">
             <!-- Email -->
             <label class="flex flex-col gap-1.5">
               <span class="text-xs font-medium text-text-muted">Email</span>
@@ -88,10 +87,6 @@ import { UiButtonComponent, UiCardComponent } from '../../shared/ui';
                 <lucide-icon [img]="icons.LogIn" class="h-4 w-4"></lucide-icon>
                 Sign in
               </button>
-              <button uiButton variant="secondary" type="button" [block]="true" (click)="submit(true)">
-                <lucide-icon [img]="icons.UserPlus" class="h-4 w-4"></lucide-icon>
-                Register
-              </button>
             </div>
           </form>
         </ui-card>
@@ -102,13 +97,12 @@ import { UiButtonComponent, UiCardComponent } from '../../shared/ui';
 export class LoginComponent {
   email = ''; password = '';
   error = signal('');
-  readonly icons = { TrendingUp, Mail, Lock, LogIn, UserPlus, AlertCircle };
+  readonly icons = { TrendingUp, Mail, Lock, LogIn, AlertCircle };
   constructor(private auth: AuthService, private router: Router) {}
-  async submit(register: boolean) {
+  async submit() {
     try {
-      register ? await this.auth.register(this.email, this.password)
-               : await this.auth.login(this.email, this.password);
+      await this.auth.login(this.email, this.password);
       this.router.navigate(['/']);
-    } catch { this.error.set(register ? 'Registration failed' : 'Wrong email or password'); }
+    } catch { this.error.set('Wrong email or password'); }
   }
 }
