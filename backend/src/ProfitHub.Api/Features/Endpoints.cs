@@ -5,6 +5,7 @@ public static class Endpoints
     public static void MapAll(WebApplication app)
     {
         Auth.Map(app);
+        AdminUsers.Map(app);
         Me.Map(app);
         Ingest.Map(app);
         Accounts.Map(app);

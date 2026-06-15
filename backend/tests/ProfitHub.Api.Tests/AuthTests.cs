@@ -1,36 +1,38 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
+using ProfitHub.Api.Domain;
 
 namespace ProfitHub.Api.Tests;
 
 public class AuthTests(ApiFactory f) : IClassFixture<ApiFactory>
 {
-    private readonly HttpClient _client = f.CreateClient();
+    private readonly ApiFactory _f = f;
+
+    private string SeedUser(string email, string password)
+    {
+        using var scope = _f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Users.Add(new User { Email = email, PasswordHash = BCrypt.Net.BCrypt.HashPassword(password) });
+        db.SaveChanges();
+        return email;
+    }
 
     [Fact]
-    public async Task Register_then_login_returns_jwt()
+    public async Task Login_returns_jwt()
     {
-        var reg = await _client.PostAsJsonAsync("/api/auth/register", new { email = "j@x.com", password = "secret123" });
-        Assert.Equal(HttpStatusCode.OK, reg.StatusCode);
-        var login = await _client.PostAsJsonAsync("/api/auth/login", new { email = "j@x.com", password = "secret123" });
+        var email = SeedUser(Guid.NewGuid() + "@x.com", "secret123");
+        var login = await _f.CreateClient().PostAsJsonAsync("/api/auth/login", new { email, password = "secret123" });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         var body = await login.Content.ReadFromJsonAsync<Dictionary<string, string>>();
         Assert.False(string.IsNullOrEmpty(body!["token"]));
     }
 
     [Fact]
-    public async Task Register_same_email_different_case_is_409()
-    {
-        var first = await _client.PostAsJsonAsync("/api/auth/register", new { email = "dup@x.com", password = "secret123" });
-        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
-        var second = await _client.PostAsJsonAsync("/api/auth/register", new { email = "DUP@X.com", password = "secret123" });
-        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
-    }
-
-    [Fact]
     public async Task Wrong_password_is_401()
     {
-        await _client.PostAsJsonAsync("/api/auth/register", new { email = "k@x.com", password = "secret123" });
-        var login = await _client.PostAsJsonAsync("/api/auth/login", new { email = "k@x.com", password = "WRONG" });
+        var email = SeedUser(Guid.NewGuid() + "@x.com", "secret123");
+        var login = await _f.CreateClient().PostAsJsonAsync("/api/auth/login", new { email, password = "WRONG" });
         Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
     }
 }

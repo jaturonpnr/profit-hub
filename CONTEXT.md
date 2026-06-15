@@ -27,7 +27,10 @@ A trading strategy (Expert Advisor) identified by its MT5 magic number. Trades c
 _Avoid_: Robot, strategy, magic (use "magic number" only for the raw id)
 
 **User**:
-A person with a login to the dashboard. The system is multi-user; each User sees only their own Accounts and Trades.
+A person with a login to the dashboard. The system is multi-user; each User sees only their own Accounts and Trades. There is no public sign-up — Users are created by an Admin.
+
+**Admin**:
+A User with elevated rights who can create, list, delete, and reset the password of other Users. The system always keeps at least one Admin. The first Admin is bootstrapped from the `Admin__Email` config at startup.
 
 **Ingest Key**:
 A per-Account API key. The collector EA on the user's own VPS sends trades with this key, which identifies the Account (and therefore the User) server-side.

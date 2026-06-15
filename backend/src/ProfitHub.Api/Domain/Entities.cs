@@ -5,6 +5,7 @@ public class User
     public Guid Id { get; set; } = Guid.NewGuid();
     public required string Email { get; set; }
     public required string PasswordHash { get; set; }
+    public bool IsAdmin { get; set; }
     public string TimeZone { get; set; } = "Asia/Bangkok";
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public List<Account> Accounts { get; set; } = [];
