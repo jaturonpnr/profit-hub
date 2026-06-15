@@ -2,12 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Frontend</title>
+  <title>Profit Hub</title>
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <meta name="theme-color" content="#0f1217">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="alternate icon" href="favicon.ico">
+  <style>
+    /* Bootstrap splash — shown until Angular replaces <app-root>. Avoids a blank
+       white flash on initial load / Render cold start. */
+    html, body { margin: 0; background: #0f1217; }
+    .ph-boot {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #0f1217;
+    }
+    .ph-boot__spinner {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 3px solid rgba(139, 92, 246, 0.25);
+      border-top-color: #8b5cf6;
+      animation: ph-spin 0.7s linear infinite;
+    }
+    @keyframes ph-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .ph-boot__spinner { animation-duration: 2s; } }
+  </style>
 </head>
 <body>
-  <app-root></app-root>
+  <app-root>
+    <div class="ph-boot"><div class="ph-boot__spinner" role="status" aria-label="Loading"></div></div>
+  </app-root>
 </body>
 </html>

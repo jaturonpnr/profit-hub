@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { LucideAngularModule, Bot, Check } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
-import { UiCardComponent, UiBadgeComponent, UiTableComponent } from '../../shared/ui';
+import { UiCardComponent, UiBadgeComponent, UiTableComponent, UiSpinnerComponent } from '../../shared/ui';
 
 interface Ea {
   magicNumber: number;
@@ -22,7 +22,7 @@ interface Ea {
 @Component({
   selector: 'ph-eas',
   standalone: true,
-  imports: [FormsModule, DecimalPipe, LucideAngularModule, UiCardComponent, UiBadgeComponent, UiTableComponent],
+  imports: [FormsModule, DecimalPipe, LucideAngularModule, UiCardComponent, UiBadgeComponent, UiTableComponent, UiSpinnerComponent],
   template: `
     <div class="animate-fade-in flex flex-col gap-6">
       <header class="flex flex-col gap-1">
@@ -31,6 +31,9 @@ interface Ea {
       </header>
 
       <ui-card [padded]="false">
+        @if (loading()) {
+          <ui-spinner label="Loading EAs…" />
+        } @else {
         <ui-table dense>
           <table>
             <thead>
@@ -79,6 +82,7 @@ interface Ea {
             </tbody>
           </table>
         </ui-table>
+        }
       </ui-card>
     </div>
 
@@ -95,12 +99,14 @@ interface Ea {
 export class EasComponent implements OnInit {
   rows = signal<Ea[]>([]);
   saved = signal(false);
+  loading = signal(true);
   readonly icons = { Bot, Check };
 
   constructor(private api: ApiService) {}
 
   async ngOnInit() {
     this.rows.set(await firstValueFrom(this.api.get<Ea[]>('/api/eas')));
+    this.loading.set(false);
   }
 
   async save(r: Ea) {
