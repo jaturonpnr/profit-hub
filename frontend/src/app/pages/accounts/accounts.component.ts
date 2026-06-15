@@ -1,5 +1,5 @@
 import { Component, OnInit, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -12,6 +12,8 @@ import { UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent,
 
 type EaStatus = 'live' | 'stale' | 'never';
 
+interface BalanceRow { accountId: string; name: string; accountNumber: number; netDeposits: number; netProfit: number; balance: number; roi: number | null; }
+
 /**
  * Accounts — refined dense table: name + MT5 number, broker, currency,
  * masked ingest key with reveal + copy, and an EA heartbeat status pill.
@@ -23,7 +25,7 @@ type EaStatus = 'live' | 'stale' | 'never';
 @Component({
   selector: 'ph-accounts',
   standalone: true,
-  imports: [FormsModule, DatePipe, LucideAngularModule, UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent, UiSpinnerComponent],
+  imports: [FormsModule, DatePipe, DecimalPipe, LucideAngularModule, UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent, UiSpinnerComponent],
   template: `
     <div class="animate-fade-in flex flex-col gap-6">
       <!-- Header -->
@@ -49,6 +51,9 @@ type EaStatus = 'live' | 'stale' | 'never';
               <th>Account</th>
               <th>Broker</th>
               <th>Currency</th>
+              <th class="!text-right">Net Deposits</th>
+              <th class="!text-right">Balance</th>
+              <th class="!text-right">ROI%</th>
               <th>Ingest Key</th>
               <th>EA Status</th>
               <th class="!text-right">Last data</th>
@@ -64,6 +69,14 @@ type EaStatus = 'live' | 'stale' | 'never';
                 </td>
                 <td class="text-text-muted">{{ a.broker }}</td>
                 <td class="text-text-muted">{{ a.currency }}</td>
+                <td class="text-right tabular-nums text-text-muted">{{ (bal(a.id)?.netDeposits ?? 0) | number:'1.2-2' }}</td>
+                <td class="text-right tabular-nums font-medium text-text">{{ (bal(a.id)?.balance ?? 0) | number:'1.2-2' }}</td>
+                <td
+                  class="text-right tabular-nums"
+                  [class.text-profit]="bal(a.id)?.roi != null && bal(a.id)!.roi! >= 0"
+                  [class.text-loss]="bal(a.id)?.roi != null && bal(a.id)!.roi! < 0"
+                  [class.text-text-muted]="bal(a.id)?.roi == null"
+                >{{ bal(a.id)?.roi != null ? (bal(a.id)!.roi | number:'1.2-2') + '%' : '—' }}</td>
                 <td>
                   <div class="flex items-center gap-1.5">
                     <code class="text-xs text-text-muted tabular-nums">{{ revealed().has(a.id) ? a.ingestKey : mask(a.ingestKey) }}</code>
@@ -123,7 +136,7 @@ type EaStatus = 'live' | 'stale' | 'never';
               </tr>
             } @empty {
               <tr>
-                <td colspan="7" class="!py-10 text-center text-sm text-text-faint">
+                <td colspan="10" class="!py-10 text-center text-sm text-text-faint">
                   No accounts yet. Click “Add account” to get started.
                 </td>
               </tr>
@@ -218,15 +231,25 @@ export class AccountsComponent implements OnInit {
   loading = signal(true);
   showAdd = signal(false);
   revealed = signal(new Set<string>());
+  // Lifetime Balance/ROI per account, keyed by accountId (merged into the table rows).
+  balances = signal(new Map<string, BalanceRow>());
   readonly icons = { Plus, Trash2, Copy, Check, Eye, EyeOff, Wifi, WifiOff, Clock, X };
 
   constructor(private api: ApiService, public filter: FilterService) {}
 
   async ngOnInit() { await this.reload(); }
   async reload() {
-    this.filter.accounts.set(await firstValueFrom(this.api.get<AccountInfo[]>('/api/accounts')));
+    const [accounts, balances] = await Promise.all([
+      firstValueFrom(this.api.get<AccountInfo[]>('/api/accounts')),
+      firstValueFrom(this.api.get<BalanceRow[]>('/api/balances')),
+    ]);
+    this.filter.accounts.set(accounts);
+    this.balances.set(new Map(balances.map(b => [b.accountId, b])));
     this.loading.set(false);
   }
+
+  /** Lifetime balance/ROI row for an account, or undefined if none. */
+  bal(id: string): BalanceRow | undefined { return this.balances().get(id); }
   async add() {
     await firstValueFrom(this.api.post('/api/accounts', { accountNumber: this.num, name: this.name, broker: this.broker }));
     this.num = 0; this.name = ''; this.broker = '';

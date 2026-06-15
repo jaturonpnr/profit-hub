@@ -15,6 +15,7 @@ import {
 
 interface SummaryRow { periodStart: string; netProfit: number; tradeCount: number; wins: number; }
 interface AccountRow { accountId: string; name: string; accountNumber: number; netProfit: number; tradeCount: number; }
+interface BalanceRow { accountId: string; name: string; accountNumber: number; netDeposits: number; netProfit: number; balance: number; roi: number | null; }
 
 /**
  * Dashboard — 4 stat cards (Today / Week / Month / All-time) with count-up +
@@ -53,6 +54,22 @@ interface AccountRow { accountId: string; name: string; accountNumber: number; n
         <ui-stat-card label="This week" [value]="week()" [series]="dailySpark()" [secondary]="thb(week())" />
         <ui-stat-card label="This month" [value]="month()" [series]="dailySpark()" [secondary]="thb(month())" />
         <ui-stat-card label="All time" [value]="allTime()" [series]="cumulativeSpark()" [secondary]="thb(allTime())" />
+
+        <!-- Balance: lifetime (ignores date filter), respects account filter. Net deposits + realized P/L. -->
+        <ui-stat-card label="Balance" [value]="balance()" [series]="[]" [secondary]="thb(balance())" />
+
+        <!-- ROI: lifetime; custom card because ui-stat-card can't render "%" or a "—" placeholder. -->
+        <div
+          class="relative overflow-hidden rounded-lg bg-surface border border-border p-4 flex flex-col gap-2"
+          [style.boxShadow]="'var(--shadow-card), var(--ring-glass)'"
+        >
+          <span class="text-xs font-medium uppercase tracking-wide text-text-muted">ROI</span>
+          <b
+            class="text-2xl font-semibold tabular-nums leading-none"
+            [class.text-profit]="roiPct() != null && roiPct()! >= 0"
+            [class.text-loss]="roiPct() != null && roiPct()! < 0"
+          >{{ roiPct() != null ? (roiPct() | number:'1.2-2') + '%' : '—' }}</b>
+        </div>
       </div>
 
       <!-- Cumulative P/L area chart -->
@@ -161,6 +178,9 @@ export class DashboardComponent implements OnInit {
   days = signal<SummaryRow[]>([]);
   byAccount = signal<AccountRow[]>([]);
   today = signal(0); week = signal(0); month = signal(0); allTime = signal(0);
+  // Lifetime aggregates from /api/balances (ignore date filter, respect account filter).
+  balance = signal(0);
+  roiPct = signal<number | null>(null); // null → "—" (net deposits ≤ 0)
   fxRate = signal<number | null>(null); // USD→THB; null = hide THB line
   loading = signal(true); // spinner until the first load resolves
 
@@ -286,13 +306,23 @@ export class DashboardComponent implements OnInit {
 
   async reload() {
     const p = this.filter.queryParams();
-    const [days, weeks, months, byAccount] = await Promise.all([
+    // Balance/ROI are lifetime: pass only the account filter, never from/to.
+    const balParams: Record<string, string> = {};
+    if (p['accountIds']) balParams['accountIds'] = p['accountIds'];
+    const [days, weeks, months, byAccount, balances] = await Promise.all([
       firstValueFrom(this.api.get<SummaryRow[]>('/api/summary', { ...p, period: 'day' })),
       firstValueFrom(this.api.get<SummaryRow[]>('/api/summary', { ...p, period: 'week' })),
       firstValueFrom(this.api.get<SummaryRow[]>('/api/summary', { ...p, period: 'month' })),
       firstValueFrom(this.api.get<AccountRow[]>('/api/summary/by-account', p)),
+      firstValueFrom(this.api.get<BalanceRow[]>('/api/balances', balParams)),
     ]);
     this.days.set(days); this.byAccount.set(byAccount);
+    // Aggregate lifetime balance & ROI across the selected accounts.
+    const totalBalance = balances.reduce((s, r) => s + r.balance, 0);
+    const totalDeposits = balances.reduce((s, r) => s + r.netDeposits, 0);
+    const totalProfit = balances.reduce((s, r) => s + r.netProfit, 0);
+    this.balance.set(totalBalance);
+    this.roiPct.set(totalDeposits > 0 ? (totalProfit / totalDeposits) * 100 : null);
     // The backend buckets summary rows in the user's configured timezone (the `tz`
     // JWT claim). We derive "today" in that same timezone so the lookup matches those
     // local-date periodStart values.
