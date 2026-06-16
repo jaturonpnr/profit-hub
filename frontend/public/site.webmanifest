@@ -1,0 +1,14 @@
+{
+  "name": "Profit Hub",
+  "short_name": "Profit Hub",
+  "description": "Multi-account MT5 gold-trading P/L dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1217",
+  "theme_color": "#0f1217",
+  "icons": [
+    { "src": "icon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "icon-512.png", "type": "image/png", "sizes": "512x512" },
+    { "src": "icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}
