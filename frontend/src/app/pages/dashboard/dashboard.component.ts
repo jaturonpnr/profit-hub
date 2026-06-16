@@ -2,7 +2,7 @@ import { Component, OnInit, computed, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { LucideAngularModule, FileDown } from 'lucide-angular';
+import { LucideAngularModule, FileDown, Sparkles, ChevronDown } from 'lucide-angular';
 import {
   NgApexchartsModule, ApexChart, ApexAxisChartSeries, ApexFill, ApexStroke,
   ApexDataLabels, ApexGrid, ApexXAxis, ApexYAxis, ApexTooltip, ApexMarkers,
@@ -53,6 +53,73 @@ interface BalanceRow { accountId: string; name: string; accountNumber: number; n
           Download report (PDF)
         </button>
       </div>
+
+      <!-- AI Coach — on-demand Thai narrative comparing current vs previous period.
+           Hidden entirely when the backend reports the Anthropic key isn't configured. -->
+      @if (coachEnabled()) {
+      <ui-card>
+        <div class="flex flex-col gap-4">
+          <button
+            type="button"
+            class="flex w-full items-center justify-between gap-3 text-left"
+            (click)="coachOpen.set(!coachOpen())"
+          >
+            <div class="flex items-center gap-2">
+              <lucide-icon [img]="icons.Sparkles" class="h-4 w-4 text-brand-400"></lucide-icon>
+              <h2 class="text-sm font-semibold tracking-tight">AI Coach</h2>
+            </div>
+            <lucide-icon
+              [img]="icons.ChevronDown"
+              class="h-4 w-4 text-text-muted transition-transform"
+              [class.rotate-180]="coachOpen()"
+            ></lucide-icon>
+          </button>
+
+          @if (coachOpen()) {
+          <div class="flex flex-col gap-4">
+            <div class="flex flex-wrap items-center gap-3">
+              <!-- Period toggle -->
+              <div class="inline-flex rounded-md border border-border overflow-hidden">
+                <button
+                  type="button"
+                  class="px-3 h-8 text-xs font-medium transition-colors"
+                  [class.bg-brand-600]="coachPeriod() === 'week'"
+                  [class.text-white]="coachPeriod() === 'week'"
+                  [class.text-text-muted]="coachPeriod() !== 'week'"
+                  (click)="coachPeriod.set('week')"
+                >สัปดาห์</button>
+                <button
+                  type="button"
+                  class="px-3 h-8 text-xs font-medium transition-colors border-l border-border"
+                  [class.bg-brand-600]="coachPeriod() === 'month'"
+                  [class.text-white]="coachPeriod() === 'month'"
+                  [class.text-text-muted]="coachPeriod() !== 'month'"
+                  (click)="coachPeriod.set('month')"
+                >เดือน</button>
+              </div>
+
+              <button uiButton variant="primary" size="sm" [disabled]="coachLoading()" (click)="generateInsight()">
+                <lucide-icon [img]="icons.Sparkles" class="h-4 w-4"></lucide-icon>
+                วิเคราะห์ด้วย AI
+              </button>
+
+              @if (coachLoading()) { <ui-spinner /> }
+              @if (coachError()) { <ui-badge variant="loss">วิเคราะห์ไม่สำเร็จ ลองใหม่</ui-badge> }
+            </div>
+
+            @if (coachText()) {
+              <p class="text-sm leading-relaxed text-text whitespace-pre-line">{{ coachText() }}</p>
+              @if (coachAt()) {
+                <p class="text-xs text-text-faint">อัปเดตล่าสุด: {{ coachAt() }}</p>
+              }
+            } @else if (!coachLoading()) {
+              <p class="text-sm text-text-faint">กดปุ่ม "วิเคราะห์ด้วย AI" เพื่อสร้างบทวิเคราะห์</p>
+            }
+          </div>
+          }
+        </div>
+      </ui-card>
+      }
 
       <ph-filter-bar (changed)="reload()" />
 
@@ -194,7 +261,17 @@ export class DashboardComponent implements OnInit {
   roiPct = signal<number | null>(null); // null → "—" (net deposits ≤ 0)
   fxRate = signal<number | null>(null); // USD→THB; null = hide THB line
   loading = signal(true); // spinner until the first load resolves
-  readonly icons = { FileDown };
+
+  // ── AI Coach panel ─────────────────────────────────────────────────────────
+  coachEnabled = signal(false);            // false → panel hidden (key not configured)
+  coachOpen = signal(true);                // collapsible state
+  coachPeriod = signal<'week' | 'month'>('week');
+  coachText = signal<string | null>(null);
+  coachAt = signal<string | null>(null);   // formatted "อัปเดตล่าสุด" time
+  coachLoading = signal(false);
+  coachError = signal(false);
+
+  readonly icons = { FileDown, Sparkles, ChevronDown };
 
   constructor(
     private api: ApiService, private filter: FilterService,
@@ -218,7 +295,55 @@ export class DashboardComponent implements OnInit {
     // FX rate is global and independent of the trade filters — fetch once.
     firstValueFrom(this.api.get<{ rate: number | null }>('/api/fx'))
       .then(fx => this.fxRate.set(fx.rate)).catch(() => this.fxRate.set(null));
+    // Load the last cached AI insight (default period: week, current accounts). When the
+    // backend reports the key isn't configured (enabled:false) the panel stays hidden.
+    this.loadCachedInsight();
     await this.reload();
+  }
+
+  /** Build the insights query string from current accountIds + chosen period. */
+  private insightParams(): string {
+    const qp = new URLSearchParams();
+    qp.set('period', this.coachPeriod());
+    const accountIds = this.filter.queryParams()['accountIds'];
+    if (accountIds) qp.set('accountIds', accountIds);
+    return qp.toString();
+  }
+
+  /** Format a UTC timestamp for the "อัปเดตล่าสุด" line, or null. */
+  private fmtTime(utc: string | null | undefined): string | null {
+    return utc ? new Date(utc).toLocaleString('th-TH') : null;
+  }
+
+  /** GET the cached latest insight; hide the panel when AI is not configured. */
+  private async loadCachedInsight() {
+    try {
+      const res = await firstValueFrom(this.api.get<{
+        enabled: boolean; text: string | null; generatedAtUtc: string | null;
+      }>(`/api/insights?${this.insightParams()}`));
+      this.coachEnabled.set(res.enabled);
+      this.coachText.set(res.text);
+      this.coachAt.set(this.fmtTime(res.generatedAtUtc));
+    } catch {
+      // Leave the panel hidden on error — treat as not available.
+      this.coachEnabled.set(false);
+    }
+  }
+
+  /** POST to generate a fresh insight for the chosen period + current accounts. */
+  async generateInsight() {
+    this.coachLoading.set(true);
+    this.coachError.set(false);
+    try {
+      const res = await firstValueFrom(this.api.post<{ text: string; generatedAtUtc: string }>(
+        `/api/insights?${this.insightParams()}`, {}));
+      this.coachText.set(res.text);
+      this.coachAt.set(this.fmtTime(res.generatedAtUtc));
+    } catch {
+      this.coachError.set(true);
+    } finally {
+      this.coachLoading.set(false);
+    }
   }
 
   /** Format a USD amount as an approximate THB line, or '' when no rate is available. */
