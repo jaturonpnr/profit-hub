@@ -13,5 +13,6 @@ public static class Endpoints
         EaNames.Map(app);
         Export.Map(app);
         Fx.Map(app);
+        Insights.Map(app);
     }
 }

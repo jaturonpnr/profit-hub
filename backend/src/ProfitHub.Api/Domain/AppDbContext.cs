@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<BalanceOperation> BalanceOperations => Set<BalanceOperation>();
     public DbSet<EaName> EaNames => Set<EaName>();
     public DbSet<FxConfig> FxConfigs => Set<FxConfig>();
+    public DbSet<Insight> Insights => Set<Insight>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -23,5 +24,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<BalanceOperation>().HasOne<Account>().WithMany().HasForeignKey(bo => bo.AccountId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<EaName>().HasIndex(x => new { x.UserId, x.MagicNumber }).IsUnique();
         b.Entity<EaName>().HasOne<User>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Insight>().HasIndex(x => new { x.UserId, x.Period }).IsUnique();
+        b.Entity<Insight>().HasOne<User>().WithMany().HasForeignKey(i => i.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }

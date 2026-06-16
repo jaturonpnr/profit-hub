@@ -64,6 +64,18 @@ public class EaName
     public required string Name { get; set; }
 }
 
+/// Cached AI Weekly Coach narrative, one row per (user, period). Upserted on
+/// POST /api/insights so reopening the dashboard shows the last analysis without
+/// re-spending Claude tokens. Period is "week" | "month".
+public class Insight
+{
+    public long Id { get; set; }
+    public Guid UserId { get; set; }
+    public required string Period { get; set; }     // "week" | "month"
+    public required string Content { get; set; }     // the Thai narrative text
+    public DateTime GeneratedAtUtc { get; set; } = DateTime.UtcNow;
+}
+
 /// Single global row holding the USD→THB exchange rate config (not per-user).
 /// OverrideRate, when set, wins over the cached live rate.
 public class FxConfig
