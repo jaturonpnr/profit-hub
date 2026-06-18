@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using ProfitHub.Api.Features;
 
 namespace ProfitHub.Api.Tests;
@@ -57,5 +58,65 @@ public class BacktestParserTests
         // Last point is the final running balance of the run.
         Assert.Equal(5450.68m, r.EquityCurve[^1].Balance);
         Assert.True(r.EquityCurve.Count <= 1000); // downsampled cap
+    }
+
+    private static Stream EnglishReportXlsx()
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("Sheet1");
+        void Put(int r, params string[] cells) { for (var c = 0; c < cells.Length; c++) ws.Cell(r, c + 1).Value = cells[c]; }
+        Put(1, "Strategy Tester Report");
+        Put(2, "Settings");
+        Put(3, "Expert:", "My EA");
+        Put(4, "Symbol:", "XAUUSD");
+        Put(5, "Period:", "H1 (2026.01.01 - 2026.02.01)");
+        Put(6, "Initial Deposit:", "2 000");
+        Put(7, "Currency:", "USD");
+        Put(8, "InpMagicNumber=777");
+        Put(9, "Results");
+        Put(10, "Total Net Profit:", "500.50", "Balance Drawdown Maximal:", "10.00 (1.50%)", "Equity Drawdown Maximal:", "50.00 (5.00%)");
+        Put(11, "Profit Factor:", "2.5", "Total Trades:", "10");
+        Put(12, "Profit Trades (% of total):", "7 (70.00%)");
+        Put(13, "Deals");
+        Put(14, "Time", "Deal", "Symbol", "Type", "Direction", "Volume", "Price", "Order", "Commission", "Swap", "Profit", "Balance", "Comment");
+        Put(15, "2026.01.01 00:00:00", "1", "balance", "", "", "", "2000", "", "", "", "", "2000");
+        Put(16, "2026.01.02 10:00:00", "2", "XAUUSD", "buy", "out", "0.10", "2700", "2", "-0.50", "0", "500.50", "2500.50");
+        var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        ms.Position = 0;
+        return ms;
+    }
+
+    [Fact]
+    public void Parses_english_labels()
+    {
+        using var s = EnglishReportXlsx();
+        var r = BacktestParser.Parse(s);
+        Assert.Equal("My EA", r.ExpertName);
+        Assert.Equal(2000m, r.InitialDeposit);       // "2 000" with space thousands sep
+        Assert.Equal(500.50m, r.NetProfit);
+        Assert.Equal(5.00m, r.EquityDrawdownMaxPct);
+        Assert.Equal(70.00m, r.WinRatePct);
+        Assert.Equal(777L, r.MagicNumber);
+        Assert.Equal(2500.50m, r.EquityCurve[^1].Balance);
+    }
+
+    [Fact]
+    public void Throws_on_non_report_file()
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("Sheet1");
+        ws.Cell(1, 1).Value = "hello";
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        ms.Position = 0;
+        Assert.Throws<BacktestParseException>(() => BacktestParser.Parse(ms));
+    }
+
+    [Fact]
+    public void Throws_on_garbage_bytes()
+    {
+        using var ms = new MemoryStream("not an xlsx"u8.ToArray());
+        Assert.Throws<BacktestParseException>(() => BacktestParser.Parse(ms));
     }
 }
