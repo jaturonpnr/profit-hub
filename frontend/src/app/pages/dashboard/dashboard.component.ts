@@ -16,6 +16,7 @@ import {
   UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent, UiSpinnerComponent,
   UiButtonComponent,
 } from '../../shared/ui';
+import { MonthlyHeatmapComponent } from './monthly-heatmap.component';
 
 interface SummaryRow { periodStart: string; netProfit: number; tradeCount: number; wins: number; }
 interface AccountRow { accountId: string; name: string; accountNumber: number; netProfit: number; tradeCount: number; }
@@ -39,7 +40,7 @@ interface BalanceRow { accountId: string; name: string; accountNumber: number; n
   imports: [
     FilterBarComponent, DecimalPipe, NgApexchartsModule, LucideAngularModule,
     UiStatCardComponent, UiCardComponent, UiTableComponent, UiBadgeComponent, UiSpinnerComponent,
-    UiButtonComponent,
+    UiButtonComponent, MonthlyHeatmapComponent,
   ],
   template: `
     <div class="animate-fade-in flex flex-col gap-6">
@@ -171,6 +172,8 @@ interface BalanceRow { accountId: string; name: string; accountNumber: number; n
           ></apx-chart>
         </div>
       </ui-card>
+
+      <ph-monthly-heatmap [filter]="heatmapFilter()" />
 
       <!-- Tables -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -385,6 +388,12 @@ export class DashboardComponent implements OnInit {
 
   /** Sparkline series — last ~12 cumulative values (derived, no fetch). */
   cumulativeSpark = computed(() => this.cumulative().slice(-12));
+
+  /** Heatmap filter: account + EA only, never date. */
+  heatmapFilter = computed(() => ({
+    accountIds: this.filter.selectedIds().join(','),
+    magic: this.filter.magic(),
+  }));
 
   // ── ApexCharts static options ──────────────────────────────────────────────
   readonly chart: ApexChart = {
