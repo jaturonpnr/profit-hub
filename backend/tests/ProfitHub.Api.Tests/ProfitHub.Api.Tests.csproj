@@ -25,4 +25,8 @@
     <ProjectReference Include="..\..\src\ProfitHub.Api\ProfitHub.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="TestData\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
