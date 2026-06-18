@@ -14,5 +14,6 @@ public static class Endpoints
         Export.Map(app);
         Fx.Map(app);
         Insights.Map(app);
+        Backtests.Map(app);
     }
 }
