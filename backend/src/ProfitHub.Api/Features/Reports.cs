@@ -60,7 +60,7 @@ public static class Reports
     }
 
     // Lists every EA (magic number) found in the user's trades, with its owning account
-    // and lifetime stats. Used by the EAs management page (rename via PUT /api/ea-names).
+    // and lifetime stats + performance metrics (see CONTEXT.md). Used by the EAs page.
     private static async Task<IResult> GetEas(ClaimsPrincipal user, AppDbContext db)
     {
         var names = await db.EaNames.Where(e => e.UserId == user.UserId())
@@ -69,22 +69,37 @@ public static class Reports
             .ToDictionaryAsync(a => a.Id, a => new { a.Name, a.AccountNumber });
         var myAccountIds = accounts.Keys.ToHashSet();
         var trades = await db.Trades.Where(t => myAccountIds.Contains(t.AccountId))
-            .Select(t => new { t.MagicNumber, t.AccountId, t.NetProfit }).ToListAsync();
+            .Select(t => new { t.MagicNumber, t.AccountId, t.NetProfit, t.CloseTimeUtc, t.Commission, t.Swap })
+            .ToListAsync();
         var rows = trades.GroupBy(t => t.MagicNumber)
             .Select(grp =>
             {
+                var ordered = grp.OrderBy(t => t.CloseTimeUtc).ToList();
+                var nets = ordered.Select(t => t.NetProfit).ToList();
                 var distinctAccounts = grp.Select(t => t.AccountId).Distinct().Count();
                 var acc = accounts.GetValueOrDefault(grp.First().AccountId);
                 var accountName = distinctAccounts > 1
                     ? "Multiple"
                     : (acc is not null && !string.IsNullOrWhiteSpace(acc.Name) ? acc.Name : acc?.AccountNumber.ToString() ?? "");
+                var wins = nets.Count(n => n > 0);
+                var (ddAmount, ddPct) = Metrics.RealizedDrawdown(nets);
                 return new
                 {
                     magicNumber = grp.Key,
-                    name = names.GetValueOrDefault(grp.Key, ""), // empty = unnamed; frontend shows magic as placeholder
+                    name = names.GetValueOrDefault(grp.Key, ""),
                     accountName,
-                    netProfit = grp.Sum(t => t.NetProfit),
-                    tradeCount = grp.Count()
+                    netProfit = nets.Sum(),
+                    tradeCount = nets.Count,
+                    winRate = nets.Count > 0 ? Math.Round(100m * wins / nets.Count, 1) : 0m,
+                    profitFactor = Metrics.ProfitFactor(nets),
+                    expectancy = Metrics.Expectancy(nets),
+                    drawdownAmount = ddAmount,
+                    drawdownPct = ddPct,
+                    swap = ordered.Sum(t => t.Swap),
+                    commission = ordered.Sum(t => t.Commission),
+                    firstTradeUtc = ordered.First().CloseTimeUtc,
+                    lastTradeUtc = ordered.Last().CloseTimeUtc,
+                    sparkline = Metrics.Sparkline(nets, 24),
                 };
             })
             .OrderByDescending(r => r.netProfit);
