@@ -11,6 +11,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<EaName> EaNames => Set<EaName>();
     public DbSet<FxConfig> FxConfigs => Set<FxConfig>();
     public DbSet<Insight> Insights => Set<Insight>();
+    public DbSet<Backtest> Backtests => Set<Backtest>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -26,5 +27,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<EaName>().HasOne<User>().WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Insight>().HasIndex(x => new { x.UserId, x.Period }).IsUnique();
         b.Entity<Insight>().HasOne<User>().WithMany().HasForeignKey(i => i.UserId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Backtest>().HasIndex(x => x.UserId);
+        b.Entity<Backtest>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        // Money columns: 2 dp is enough. Ratio/percent columns need more precision
+        // (e.g. Sharpe 63.516736, Profit Factor 9.850288) — default decimal(18,2) would truncate them.
+        b.Entity<Backtest>().Property(x => x.InitialDeposit).HasPrecision(18, 2);
+        b.Entity<Backtest>().Property(x => x.NetProfit).HasPrecision(18, 2);
+        b.Entity<Backtest>().Property(x => x.GrossProfit).HasPrecision(18, 2);
+        b.Entity<Backtest>().Property(x => x.GrossLoss).HasPrecision(18, 2);
+        b.Entity<Backtest>().Property(x => x.EquityDrawdownMaxAbs).HasPrecision(18, 2);
+        b.Entity<Backtest>().Property(x => x.ReturnPct).HasPrecision(18, 6);
+        b.Entity<Backtest>().Property(x => x.ProfitFactor).HasPrecision(18, 6);
+        b.Entity<Backtest>().Property(x => x.ExpectedPayoff).HasPrecision(18, 6);
+        b.Entity<Backtest>().Property(x => x.RecoveryFactor).HasPrecision(18, 6);
+        b.Entity<Backtest>().Property(x => x.SharpeRatio).HasPrecision(18, 6);
+        b.Entity<Backtest>().Property(x => x.BalanceDrawdownMaxPct).HasPrecision(18, 6);
+        b.Entity<Backtest>().Property(x => x.EquityDrawdownMaxPct).HasPrecision(18, 6);
+        b.Entity<Backtest>().Property(x => x.WinRatePct).HasPrecision(18, 6);
     }
 }
