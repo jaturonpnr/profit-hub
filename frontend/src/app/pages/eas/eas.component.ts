@@ -24,6 +24,7 @@ interface Ea {
   firstTradeUtc: string;
   lastTradeUtc: string;
   sparkline: number[];
+  sparkSeries?: ApexAxisChartSeries; // precomputed once so ApexCharts isn't re-fed every CD cycle
 }
 
 /** EAs page — one metric card per magic number, with sparkline + headline metrics.
@@ -72,7 +73,7 @@ interface Ea {
                     }
                   </div>
                   <div class="h-12 w-28">
-                    <apx-chart [series]="spark(r)" [chart]="sparkChart" [stroke]="sparkStroke" [fill]="sparkFill"
+                    <apx-chart [series]="r.sparkSeries!" [chart]="sparkChart" [stroke]="sparkStroke" [fill]="sparkFill"
                       [colors]="[r.netProfit >= 0 ? '#30a46c' : '#e5484d']"></apx-chart>
                   </div>
                 </div>
@@ -113,16 +114,30 @@ export class EasComponent implements OnInit {
     firstValueFrom(this.api.get<{ rate: number | null }>('/api/fx'))
       .then(fx => this.fxRate.set(fx.rate)).catch(() => this.fxRate.set(null));
     try {
-      this.rows.set(await firstValueFrom(this.api.get<Ea[]>('/api/eas')));
+      const data = await firstValueFrom(this.api.get<Ea[]>('/api/eas'));
+      for (const r of data) {
+        r.sparkSeries = [{ name: 'Cumulative', data: r.sparkline }];
+        this.lastNames.set(r.magicNumber, r.name);
+      }
+      this.rows.set(data);
     } finally {
       this.loading.set(false);
     }
   }
 
+  private lastNames = new Map<number, string>(); // last successfully-saved name, for rollback
+
   async save(r: Ea) {
-    await firstValueFrom(this.api.put(`/api/ea-names/${r.magicNumber}`, { name: r.name.trim() }));
-    this.saved.set(true);
-    setTimeout(() => this.saved.set(false), 1500);
+    const trimmed = r.name.trim();
+    if (trimmed === this.lastNames.get(r.magicNumber)) return; // no change
+    try {
+      await firstValueFrom(this.api.put(`/api/ea-names/${r.magicNumber}`, { name: trimmed }));
+      this.lastNames.set(r.magicNumber, trimmed);
+      this.saved.set(true);
+      setTimeout(() => this.saved.set(false), 1500);
+    } catch {
+      r.name = this.lastNames.get(r.magicNumber) ?? ''; // roll back the optimistic ngModel edit
+    }
   }
 
   /** Format a USD amount as an approximate THB line, or '' when no rate is available. */
@@ -132,7 +147,6 @@ export class EasComponent implements OnInit {
     return '≈ ฿' + (usd * r).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  spark(r: Ea): ApexAxisChartSeries { return [{ name: 'Cumulative', data: r.sparkline }]; }
   readonly sparkChart: ApexChart = { type: 'area', height: 48, sparkline: { enabled: true }, animations: { enabled: false } };
   readonly sparkStroke: ApexStroke = { curve: 'smooth', width: 1.5 };
   readonly sparkFill: ApexFill = { type: 'gradient', gradient: { opacityFrom: 0.3, opacityTo: 0 } };

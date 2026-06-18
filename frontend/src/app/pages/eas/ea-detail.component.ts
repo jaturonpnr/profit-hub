@@ -12,13 +12,12 @@ import { UiCardComponent, UiSpinnerComponent } from '../../shared/ui';
 
 interface EquityPoint { t: string; balance: number; }
 interface HeatCell { dow: number; hour: number; netProfit: number; tradeCount: number; }
-interface MonthRow { periodStart: string; netProfit: number; tradeCount: number; }
 interface RecentTrade { closeTimeUtc: string; symbol: string; direction: string; lots: number; netProfit: number; commission: number; swap: number; }
 interface EaDetail {
   magicNumber: number; name: string; netProfit: number; tradeCount: number; winRate: number;
   profitFactor: number | null; expectancy: number; drawdownAmount: number; drawdownPct: number;
   swap: number; commission: number; firstTradeUtc: string; lastTradeUtc: string;
-  equityCurve: EquityPoint[]; heatmap: HeatCell[]; monthly: MonthRow[]; recentTrades: RecentTrade[];
+  equityCurve: EquityPoint[]; heatmap: HeatCell[]; recentTrades: RecentTrade[];
 }
 
 const DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -125,7 +124,9 @@ export class EaDetailComponent implements OnInit {
   }]);
 
   private maxAbsHeat = computed(() => Math.max(1, ...(this.d()?.heatmap ?? []).map(c => Math.abs(c.netProfit))));
-  private heatCell(dow: number, hour: number) { return this.d()?.heatmap.find(c => c.dow === dow && c.hour === hour); }
+  // O(1) lookup keyed by "dow-hour", rebuilt only when the EA changes (vs .find() per cell per CD cycle).
+  private heatMap = computed(() => new Map((this.d()?.heatmap ?? []).map(c => [`${c.dow}-${c.hour}`, c])));
+  private heatCell(dow: number, hour: number) { return this.heatMap().get(`${dow}-${hour}`); }
   heatBg(dow: number, hour: number): string {
     const c = this.heatCell(dow, hour);
     if (!c) return 'rgba(255,255,255,0.03)';

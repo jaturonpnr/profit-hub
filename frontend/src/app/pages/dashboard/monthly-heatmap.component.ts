@@ -19,7 +19,9 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
     <ui-card [hasHeader]="true">
       <div uiCardHeader><h2 class="text-sm font-medium text-text-muted">Monthly performance (Net Profit, USD)</h2></div>
       <div class="overflow-x-auto px-2 pb-3 pt-3">
-        @if (years().length === 0) {
+        @if (error()) {
+          <div class="py-8 text-center text-sm text-loss">โหลด heatmap ไม่สำเร็จ <button class="ml-2 underline" (click)="reload()">ลองใหม่</button></div>
+        } @else if (years().length === 0) {
           <div class="py-8 text-center text-sm text-text-faint">No trades yet.</div>
         } @else {
           <table class="w-full border-separate border-spacing-1 text-xs">
@@ -56,6 +58,8 @@ export class MonthlyHeatmapComponent {
   readonly months = MONTHS;
   readonly monthIdx = [1,2,3,4,5,6,7,8,9,10,11,12];
   private cells = signal<HeatCell[]>([]);
+  error = signal(false);
+  private gen = 0; // guards against out-of-order responses on rapid filter changes
 
   private _filter: HeatmapFilter = { accountIds: '', magic: null };
   @Input() set filter(f: HeatmapFilter) { this._filter = f; this.reload(); }
@@ -63,16 +67,32 @@ export class MonthlyHeatmapComponent {
   constructor(private api: ApiService) {}
 
   async reload() {
+    const myGen = ++this.gen;
     const params: Record<string, string> = {};
     if (this._filter.accountIds) params['accountIds'] = this._filter.accountIds;
     if (this._filter.magic !== null) params['magic'] = String(this._filter.magic);
-    this.cells.set(await firstValueFrom(this.api.get<HeatCell[]>('/api/heatmap', params)));
+    try {
+      const data = await firstValueFrom(this.api.get<HeatCell[]>('/api/heatmap', params));
+      if (myGen !== this.gen) return; // a newer request superseded this one
+      this.cells.set(data);
+      this.error.set(false);
+    } catch {
+      if (myGen !== this.gen) return;
+      this.error.set(true);
+    }
   }
 
+  // O(1) lookups keyed by "year-month", rebuilt only when cells change.
+  private cellMap = computed(() => new Map(this.cells().map(c => [`${c.year}-${c.month}`, c])));
   years = computed(() => [...new Set(this.cells().map(c => c.year))].sort((a, b) => b - a));
-  private cell(y: number, m: number) { return this.cells().find(c => c.year === y && c.month === m); }
+  private yearTotals = computed(() => {
+    const m = new Map<number, number>();
+    for (const c of this.cells()) m.set(c.year, (m.get(c.year) ?? 0) + c.netProfit);
+    return m;
+  });
+  private cell(y: number, m: number) { return this.cellMap().get(`${y}-${m}`); }
   value(y: number, m: number): number | null { const c = this.cell(y, m); return c ? c.netProfit : null; }
-  yearTotal(y: number) { return this.cells().filter(c => c.year === y).reduce((s, c) => s + c.netProfit, 0); }
+  yearTotal(y: number) { return this.yearTotals().get(y) ?? 0; }
   cellTitle(y: number, m: number) { const c = this.cell(y, m); return c ? `${MONTHS[m-1]} ${y}: ${c.netProfit.toFixed(2)} (${c.tradeCount} trades)` : ''; }
 
   private maxAbs = computed(() => Math.max(1, ...this.cells().map(c => Math.abs(c.netProfit))));
