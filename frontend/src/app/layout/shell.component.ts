@@ -1,6 +1,6 @@
 import { Component, computed, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { LucideAngularModule, LayoutDashboard, TrendingUp, Wallet, LogOut, Settings, Bot, ShieldCheck } from 'lucide-angular';
+import { LucideAngularModule, LayoutDashboard, TrendingUp, Wallet, LogOut, Settings, Bot, ShieldCheck, FlaskConical } from 'lucide-angular';
 import { AuthService } from '../core/auth.service';
 import { UiButtonComponent } from '../shared/ui';
 
@@ -95,6 +95,7 @@ export class ShellComponent {
     { path: '/trades', label: 'Trades', icon: TrendingUp, exact: false },
     { path: '/accounts', label: 'Accounts', icon: Wallet, exact: false },
     { path: '/eas', label: 'EAs', icon: Bot, exact: false },
+    { path: '/backtests', label: 'Backtests', icon: FlaskConical, exact: false },
     ...(this.auth.isAdmin ? [{ path: '/users', label: 'Users', icon: ShieldCheck, exact: false }] : []),
     { path: '/settings', label: 'Settings', icon: Settings, exact: false },
   ]);
