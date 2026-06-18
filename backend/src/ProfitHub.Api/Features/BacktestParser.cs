@@ -215,6 +215,59 @@ public static class BacktestParser
         return null;
     }
 
-    // Equity curve placeholder — implemented in Task 3.
-    private static IReadOnlyList<EquityPoint> ParseEquityCurve(string[][] grid) => [];
+    // Read the deals table ("การซื้อขาย"/"Deals"): each row's running "Balance" column
+    // becomes an equity point. The first row is the opening "balance" deposit. Long runs
+    // are stride-downsampled to <=1000 points (always keeping the first and last).
+    private static IReadOnlyList<EquityPoint> ParseEquityCurve(string[][] grid)
+    {
+        var section = -1;
+        for (var r = 0; r < grid.Length; r++)
+            if (grid[r].Length > 0 && DealsSection.Contains(grid[r][0].ToLowerInvariant()))
+            { section = r; break; }
+        if (section < 0 || section + 1 >= grid.Length) return [];
+
+        var header = grid[section + 1];
+        int timeCol = IndexOf(header, "เวลา", "time");
+        int balCol = IndexOf(header, "balance", "ยอดคงเหลือ");
+        if (timeCol < 0 || balCol < 0) return [];
+
+        var points = new List<EquityPoint>();
+        for (var r = section + 2; r < grid.Length; r++)
+        {
+            var row = grid[r];
+            if (balCol >= row.Length || timeCol >= row.Length) continue;
+            if (row[timeCol].Length == 0 && row[balCol].Length == 0) continue;
+            if (row[balCol].Length == 0) continue;
+            // Skip summary/totals rows that have no timestamp
+            if (row[timeCol].Length == 0) continue;
+            points.Add(new EquityPoint(NormalizeTime(row[timeCol]), Num(row[balCol])));
+        }
+        return Downsample(points, 1000);
+    }
+
+    private static int IndexOf(string[] header, params string[] labels)
+    {
+        for (var c = 0; c < header.Length; c++)
+            if (labels.Contains(header[c].ToLowerInvariant())) return c;
+        return -1;
+    }
+
+    // "2026.01.01 00:00:00" -> "2026-01-01T00:00:00" (ISO, for the frontend chart).
+    private static string NormalizeTime(string s)
+    {
+        var m = Regex.Match(s, @"(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}):(\d{2}):(\d{2})");
+        return m.Success
+            ? $"{m.Groups[1].Value}-{m.Groups[2].Value}-{m.Groups[3].Value}T{m.Groups[4].Value}:{m.Groups[5].Value}:{m.Groups[6].Value}"
+            : s;
+    }
+
+    private static IReadOnlyList<EquityPoint> Downsample(List<EquityPoint> pts, int max)
+    {
+        if (pts.Count <= max) return pts;
+        var stride = (int)Math.Ceiling(pts.Count / (double)max);
+        var outp = new List<EquityPoint>();
+        for (var i = 0; i < pts.Count; i += stride) outp.Add(pts[i]);
+        if (outp[^1] != pts[^1]) outp.Add(pts[^1]); // always keep the final balance
+        return outp;
+    }
 }

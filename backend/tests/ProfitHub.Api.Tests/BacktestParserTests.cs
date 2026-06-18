@@ -45,4 +45,17 @@ public class BacktestParserTests
         Assert.Equal(1620.16m, r.EquityDrawdownMaxAbs);
         Assert.Equal(1234L, r.MagicNumber);
     }
+
+    [Fact]
+    public void Builds_equity_curve_from_deals()
+    {
+        var r = ParseFixture("qa.xlsx");
+        Assert.NotEmpty(r.EquityCurve);
+        // First deal is the "balance" deposit row: balance == initial deposit.
+        Assert.Equal(1500m, r.EquityCurve[0].Balance);
+        Assert.StartsWith("2026-01-01", r.EquityCurve[0].T);
+        // Last point is the final running balance of the run.
+        Assert.Equal(5450.68m, r.EquityCurve[^1].Balance);
+        Assert.True(r.EquityCurve.Count <= 1000); // downsampled cap
+    }
 }
