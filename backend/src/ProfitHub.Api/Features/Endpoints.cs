@@ -10,6 +10,7 @@ public static class Endpoints
         Ingest.Map(app);
         Accounts.Map(app);
         Reports.Map(app);
+        Analytics.Map(app);
         EaNames.Map(app);
         Export.Map(app);
         Fx.Map(app);
