@@ -23,6 +23,7 @@ export interface BacktestSummary {
   netProfit: number;
   returnPct: number;
   profitFactor: number;
+  expectedPayoff: number;
   recoveryFactor: number;
   sharpeRatio: number;
   balanceDrawdownMaxPct: number;
