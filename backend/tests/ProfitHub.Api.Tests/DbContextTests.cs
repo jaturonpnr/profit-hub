@@ -31,4 +31,26 @@ public class DbContextTests
         ctx.Add(new Trade { AccountId = acc.Id, DealTicket = 1, Symbol = "XAUUSD", Direction = "buy" });
         Assert.Throws<DbUpdateException>(() => ctx.SaveChanges());
     }
+
+    [Fact]
+    public async Task Can_persist_and_read_a_backtest()
+    {
+        using var ctx = TestDb.Create(out var conn);
+        using var _ = conn;
+        var user = new User { Email = Guid.NewGuid() + "@x.com", PasswordHash = "x" };
+        ctx.Users.Add(user);
+        ctx.Backtests.Add(new Backtest
+        {
+            UserId = user.Id, ExpertName = "Quantum Athena", InitialDeposit = 1500m,
+            NetProfit = 3950.68m, ReturnPct = 263.38m, SharpeRatio = 63.516736m,
+            EquityDrawdownMaxPct = 19.94m, EquityCurveJson = "[]",
+            PeriodFrom = new DateOnly(2026, 1, 1), PeriodTo = new DateOnly(2026, 6, 11),
+        });
+        await ctx.SaveChangesAsync();
+
+        var read = await ctx.Backtests.SingleAsync(x => x.UserId == user.Id);
+        Assert.Equal("Quantum Athena", read.ExpertName);
+        Assert.Equal(63.516736m, read.SharpeRatio); // precision preserved, not truncated to 63.52
+        Assert.Equal(new DateOnly(2026, 1, 1), read.PeriodFrom); // DateOnly round-trips on SQLite
+    }
 }

@@ -85,3 +85,44 @@ public class FxConfig
     public decimal? LiveRate { get; set; }     // last fetched THB per 1 USD
     public DateTime? LiveRateFetchedAtUtc { get; set; }
 }
+
+/// One imported MT5 Strategy Tester run, owned by a User. Hypothetical data — never
+/// mixed into live Net Profit/Balance/ROI (see ADR 0004). Summary KPIs are stored as
+/// queryable columns; the equity curve and the full raw metric set are stored as JSON.
+public class Backtest
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+
+    // Identity & settings (from the report's settings block)
+    public required string ExpertName { get; set; } // always present — the Backtest's identity
+    public string Symbol { get; set; } = "";
+    public string Timeframe { get; set; } = "";     // e.g. "M15"
+    public DateOnly? PeriodFrom { get; set; }
+    public DateOnly? PeriodTo { get; set; }
+    public long? MagicNumber { get; set; }          // best-effort; null if not found
+    public decimal InitialDeposit { get; set; }
+    public string Currency { get; set; } = "USD";
+
+    // Headline KPIs (sortable comparison columns)
+    public decimal NetProfit { get; set; }
+    public decimal GrossProfit { get; set; }
+    public decimal GrossLoss { get; set; }
+    public decimal ReturnPct { get; set; }          // NetProfit / InitialDeposit * 100 (Backtest Return)
+    public decimal ProfitFactor { get; set; }
+    public decimal ExpectedPayoff { get; set; }
+    public decimal RecoveryFactor { get; set; }
+    public decimal SharpeRatio { get; set; }
+    public decimal BalanceDrawdownMaxPct { get; set; }
+    public decimal EquityDrawdownMaxPct { get; set; } // Max Equity Drawdown — the real risk measure
+    public decimal EquityDrawdownMaxAbs { get; set; }
+    public int TotalTrades { get; set; }
+    public decimal WinRatePct { get; set; }
+
+    // Series + raw, stored denormalised as JSON text
+    public string EquityCurveJson { get; set; } = "[]";  // [{ "t": "2026-01-01T00:00:00", "balance": 1500 }, ...]
+    public string RawMetricsJson { get; set; } = "{}";   // every parsed label→value, future-proofing
+
+    public string SourceFileName { get; set; } = "";
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+}

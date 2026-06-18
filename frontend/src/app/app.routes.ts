@@ -11,6 +11,8 @@ export const routes: Routes = [
       { path: 'trades', title: 'Trades', loadComponent: () => import('./pages/trades/trades.component').then(m => m.TradesComponent) },
       { path: 'accounts', title: 'Accounts', loadComponent: () => import('./pages/accounts/accounts.component').then(m => m.AccountsComponent) },
       { path: 'eas', title: 'EAs', loadComponent: () => import('./pages/eas/eas.component').then(m => m.EasComponent) },
+      { path: 'backtests', title: 'Backtests', loadComponent: () => import('./pages/backtests/backtests.component').then(m => m.BacktestsComponent) },
+      { path: 'backtests/:id', title: 'Backtest', loadComponent: () => import('./pages/backtests/backtest-detail.component').then(m => m.BacktestDetailComponent) },
       { path: 'users', title: 'Users', canActivate: [adminGuard], loadComponent: () => import('./pages/users/users.component').then(m => m.UsersComponent) },
       { path: 'settings', title: 'Settings', loadComponent: () => import('./pages/settings/settings.component').then(m => m.SettingsComponent) },
     ],
