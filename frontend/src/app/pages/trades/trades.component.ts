@@ -15,7 +15,7 @@ import { UiButtonComponent, UiCardComponent, UiBadgeComponent, UiTableComponent,
 
 interface Trade {
   symbol: string; direction: string; lots: number; openPrice: number; closePrice: number;
-  closeTimeUtc: string; netProfit: number; magicNumber: number;
+  closeTimeUtc: string; netProfit: number; magicNumber: number; executionMs: number | null;
 }
 
 /**
@@ -102,6 +102,7 @@ interface Trade {
                   <th class="!text-right">Open</th>
                   <th class="!text-right">Close</th>
                   <th class="!text-right">Profit</th>
+                  <th class="!text-right">Exec (ms)</th>
                   <th>EA</th>
                   <th>Closed</th>
                 </tr>
@@ -131,6 +132,7 @@ interface Trade {
                       [class.text-profit]="t.netProfit >= 0"
                       [class.text-loss]="t.netProfit < 0"
                     >{{ t.netProfit >= 0 ? '+' : '' }}{{ t.netProfit | number:'1.2-2' }}</td>
+                    <td class="text-right tabular-nums text-text-muted">{{ t.executionMs != null ? (t.executionMs | number:'1.0-0') : '—' }}</td>
                     <td><ui-badge variant="neutral">{{ t.magicNumber }}</ui-badge></td>
                     <td class="tabular-nums text-text-muted whitespace-nowrap">{{ t.closeTimeUtc | date:'short' }}</td>
                   </tr>

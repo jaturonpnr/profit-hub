@@ -8,7 +8,8 @@ public static class Ingest
     public record DealDto(long DealTicket, long PositionId, string Symbol, string Type,
         decimal Lots, decimal OpenPrice, decimal ClosePrice,
         DateTime OpenTimeUtc, DateTime CloseTimeUtc,
-        decimal GrossProfit, decimal Commission, decimal Swap, long MagicNumber, string? Comment);
+        decimal GrossProfit, decimal Commission, decimal Swap, long MagicNumber, string? Comment,
+        int? ExecutionMs = null);
     public record Batch(DealDto[] Deals);
 
     public static void Map(WebApplication app)
@@ -62,6 +63,9 @@ public static class Ingest
                     trade.GrossProfit = d.GrossProfit; trade.Commission = d.Commission; trade.Swap = d.Swap;
                     trade.NetProfit = d.GrossProfit + d.Commission + d.Swap;
                     trade.MagicNumber = d.MagicNumber; trade.Comment = d.Comment ?? "";
+                    // Only overwrite when the EA actually provided a value (>=0); a re-send that
+                    // omits it (null) or sends the -1 sentinel must NOT wipe a known value.
+                    if (d.ExecutionMs is { } ms && ms >= 0) trade.ExecutionMs = ms;
                 }
                 else
                 {

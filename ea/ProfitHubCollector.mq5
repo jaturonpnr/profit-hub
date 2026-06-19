@@ -50,10 +50,12 @@ void OnTimer()
    datetime times[];    string   symbols[];  double  lots[];
    double   closes[];   double   profits[];  double  commissions[];
    double   swaps[];    long     magics[];   string  comments[];
+   ulong    orders[];
    ArrayResize(tickets, g_batch);  ArrayResize(posIds, g_batch);   ArrayResize(typeStrs, g_batch);
    ArrayResize(times, g_batch);    ArrayResize(symbols, g_batch);  ArrayResize(lots, g_batch);
    ArrayResize(closes, g_batch);   ArrayResize(profits, g_batch);  ArrayResize(commissions, g_batch);
    ArrayResize(swaps, g_batch);    ArrayResize(magics, g_batch);   ArrayResize(comments, g_batch);
+   ArrayResize(orders, g_batch);
 
    int count = 0;
    bool hitBatchLimit = false; // true when the loop was cut short by the batch cap
@@ -86,6 +88,7 @@ void OnTimer()
       swaps[count]       = HistoryDealGetDouble(ticket, DEAL_SWAP);
       magics[count]      = HistoryDealGetInteger(ticket, DEAL_MAGIC);
       comments[count]    = HistoryDealGetString(ticket, DEAL_COMMENT);
+      orders[count]      = (ulong)HistoryDealGetInteger(ticket, DEAL_ORDER);
 
       if(t > maxTime) maxTime = t;
       count++;
@@ -123,18 +126,29 @@ void OnTimer()
          }
       }
 
+      // Execution latency of the order that closed this position: DONE - SETUP (ms).
+      // -1 when unavailable (order not in history / missing timestamps); backend maps -1 -> null.
+      // Read-only history access — never modifies orders/positions.
+      long execMs = -1;
+      if(HistoryOrderSelect(orders[j]))
+      {
+         long setupMsc = (long)HistoryOrderGetInteger(orders[j], ORDER_TIME_SETUP_MSC);
+         long doneMsc  = (long)HistoryOrderGetInteger(orders[j], ORDER_TIME_DONE_MSC);
+         if(setupMsc > 0 && doneMsc >= setupMsc) execMs = doneMsc - setupMsc;
+      }
+
       if(j > 0) json += ",";
       json += StringFormat(
         "{\"dealTicket\":%I64u,\"positionId\":%I64d,\"symbol\":\"%s\",\"type\":\"%s\","
         "\"lots\":%.3f,\"openPrice\":%.5f,\"closePrice\":%.5f,"
         "\"openTimeUtc\":\"%s\",\"closeTimeUtc\":\"%s\","
         "\"grossProfit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,"
-        "\"magicNumber\":%I64d,\"comment\":\"%s\"}",
+        "\"magicNumber\":%I64d,\"comment\":\"%s\",\"executionMs\":%I64d}",
         tickets[j], posIds[j], EscapeJson(symbols[j]), typeStrs[j],
         lots[j], openPrice, closes[j],
         ToIsoUtc(openTime), ToIsoUtc(times[j]),
         profits[j], commission, swap,
-        magics[j], EscapeJson(comments[j]));
+        magics[j], EscapeJson(comments[j]), execMs);
    }
 
    if(Push("[" + json + "]"))

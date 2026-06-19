@@ -44,6 +44,7 @@ public class Trade
     public decimal NetProfit { get; set; }           // Gross + Commission + Swap (CONTEXT.md)
     public long MagicNumber { get; set; }
     public string Comment { get; set; } = "";
+    public int? ExecutionMs { get; set; }            // closing order fill latency, ms; null = unknown
 }
 
 public class BalanceOperation

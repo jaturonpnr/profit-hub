@@ -24,7 +24,7 @@ public class AnalyticsTests(ApiFactory f) : IClassFixture<ApiFactory>
         return (client, accountId);
     }
 
-    private void AddTrade(Guid accountId, long magic, decimal net, DateTime closeUtc, decimal commission = 0, decimal swap = 0)
+    private void AddTrade(Guid accountId, long magic, decimal net, DateTime closeUtc, decimal commission = 0, decimal swap = 0, int? executionMs = null)
     {
         using var scope = _f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -34,6 +34,7 @@ public class AnalyticsTests(ApiFactory f) : IClassFixture<ApiFactory>
             Symbol = "XAUUSD", Direction = net >= 0 ? "buy" : "sell",
             NetProfit = net, GrossProfit = net, Commission = commission, Swap = swap,
             MagicNumber = magic, CloseTimeUtc = DateTime.SpecifyKind(closeUtc, DateTimeKind.Utc),
+            ExecutionMs = executionMs,
         });
         db.SaveChanges();
     }
@@ -93,5 +94,20 @@ public class AnalyticsTests(ApiFactory f) : IClassFixture<ApiFactory>
         Assert.Equal(3, ea["tradeCount"].GetInt32());
         Assert.Equal(4.00m, ea["profitFactor"].GetDecimal()); // (100+60)/40
         Assert.Equal(40m, ea["drawdownAmount"].GetDecimal()); // 100 -> 60
+    }
+
+    [Fact]
+    public async Task Ea_endpoints_expose_execution_metrics()
+    {
+        var (client, acc) = await SeedAccount();
+        AddTrade(acc, 5, 100m, new DateTime(2026, 1, 1, 9, 0, 0), executionMs: 400);
+        AddTrade(acc, 5, -50m, new DateTime(2026, 1, 2, 9, 0, 0), executionMs: 600);
+
+        var eas = await client.GetFromJsonAsync<List<Dictionary<string, System.Text.Json.JsonElement>>>("/api/eas");
+        Assert.Equal(500, eas!.Single()["avgExecutionMs"].GetInt32());
+
+        var detail = await client.GetFromJsonAsync<Dictionary<string, System.Text.Json.JsonElement>>("/api/eas/5");
+        Assert.Equal(500, detail!["avgExecutionMs"].GetInt32());
+        Assert.Equal(600, detail["maxExecutionMs"].GetInt32());
     }
 }
