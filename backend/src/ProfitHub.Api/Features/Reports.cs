@@ -69,7 +69,7 @@ public static class Reports
             .ToDictionaryAsync(a => a.Id, a => new { a.Name, a.AccountNumber });
         var myAccountIds = accounts.Keys.ToHashSet();
         var trades = await db.Trades.Where(t => myAccountIds.Contains(t.AccountId))
-            .Select(t => new { t.MagicNumber, t.AccountId, t.NetProfit, t.CloseTimeUtc, t.Commission, t.Swap })
+            .Select(t => new { t.MagicNumber, t.AccountId, t.NetProfit, t.CloseTimeUtc, t.Commission, t.Swap, t.ExecutionMs })
             .ToListAsync();
         var rows = trades.GroupBy(t => t.MagicNumber)
             .Select(grp =>
@@ -83,6 +83,8 @@ public static class Reports
                     : (acc is not null && !string.IsNullOrWhiteSpace(acc.Name) ? acc.Name : acc?.AccountNumber.ToString() ?? "");
                 var wins = nets.Count(n => n > 0);
                 var (ddAmount, ddPct) = Metrics.RealizedDrawdown(nets);
+                var execs = ordered.Where(t => t.ExecutionMs != null).Select(t => t.ExecutionMs!.Value).ToList();
+                int? avgExec = execs.Count > 0 ? (int)Math.Round(execs.Average()) : null;
                 return new
                 {
                     magicNumber = grp.Key,
@@ -100,6 +102,7 @@ public static class Reports
                     firstTradeUtc = ordered.First().CloseTimeUtc,
                     lastTradeUtc = ordered.Last().CloseTimeUtc,
                     sparkline = Metrics.Sparkline(nets, 24),
+                    avgExecutionMs = avgExec,
                 };
             })
             .OrderByDescending(r => r.netProfit);

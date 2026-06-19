@@ -55,7 +55,7 @@ public static class Analytics
 
         var trades = await Reports.Filtered(db, user, ids, null, null, magic, tz)
             .OrderBy(t => t.CloseTimeUtc).ThenBy(t => t.Id) // stable order for basket EAs (simultaneous closes)
-            .Select(t => new { t.CloseTimeUtc, t.NetProfit, t.Symbol, t.Direction, t.Lots, t.Commission, t.Swap })
+            .Select(t => new { t.CloseTimeUtc, t.NetProfit, t.Symbol, t.Direction, t.Lots, t.Commission, t.Swap, t.ExecutionMs })
             .ToListAsync();
 
         if (trades.Count == 0)
@@ -64,6 +64,9 @@ public static class Analytics
         var nets = trades.Select(t => t.NetProfit).ToList();
         var wins = nets.Count(n => n > 0);
         var (ddAmount, ddPct) = Metrics.RealizedDrawdown(nets);
+        var execs = trades.Where(t => t.ExecutionMs != null).Select(t => t.ExecutionMs!.Value).ToList();
+        int? avgExec = execs.Count > 0 ? (int)Math.Round(execs.Average()) : null;
+        int? maxExec = execs.Count > 0 ? execs.Max() : null;
 
         var curveFull = new List<object>();
         decimal run = 0m;
@@ -111,6 +114,8 @@ public static class Analytics
             commission = trades.Sum(t => t.Commission),
             firstTradeUtc = trades.First().CloseTimeUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             lastTradeUtc = trades.Last().CloseTimeUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            avgExecutionMs = avgExec,
+            maxExecutionMs = maxExec,
             equityCurve = curve,
             heatmap = heat,
             monthly,
