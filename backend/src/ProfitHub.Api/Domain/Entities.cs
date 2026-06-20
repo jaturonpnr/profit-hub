@@ -44,7 +44,8 @@ public class Trade
     public decimal NetProfit { get; set; }           // Gross + Commission + Swap (CONTEXT.md)
     public long MagicNumber { get; set; }
     public string Comment { get; set; } = "";
-    public int? ExecutionMs { get; set; }            // closing order fill latency, ms; null = unknown
+    public decimal? ExecutionMs { get; set; }        // journal "done in X ms" (3 dp); set by the execution sidecar
+    public long? ClosingOrderTicket { get; set; }    // MT5 order id that closed the position; sidecar match key
 }
 
 public class BalanceOperation

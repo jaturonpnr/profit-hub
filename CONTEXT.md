@@ -15,6 +15,13 @@ The price difference of a Trade times its volume, before any costs.
 Gross Profit plus commission and swap of the Trade. The primary number shown on the dashboard and in exports. Excludes Balance Operations.
 _Avoid_: Profit (ambiguous), P/L (use only for period aggregates)
 
+**Execution Time**:
+How long it took to fill the order that closed a Trade, in milliseconds — the broker/VPS latency. Two distinct measurements exist and must not be conflated:
+- **Server fill time** (currently stored, shown as "fill ≈"): the closing order's `ORDER_TIME_DONE_MSC − ORDER_TIME_SETUP_MSC`, read from history by the collector EA. Server-side only (excludes the terminal↔server round trip), whole ms, approximate.
+- **Journal execution time** (target, not yet stored): the terminal-measured round trip reported as "order #… done in X ms" in the MT5 journal, sub-millisecond. Not present in trade/order history — obtainable only by a log-parsing sidecar process (the EA cannot read the journal: MQL5 file access is sandboxed to `MQL5/Files`).
+Captured only for the closing leg; unknown (null) until backfilled.
+_Avoid_: Latency (informal), ping
+
 **Deal Ticket**:
 MT5's unique id for a closed deal. Used as the idempotency key — re-sending the same Trade never creates a duplicate.
 
@@ -22,9 +29,30 @@ MT5's unique id for a closed deal. Used as the idempotency key — re-sending th
 A deposit or withdrawal on an account. Stored separately and never counted as profit.
 _Avoid_: Balance trade
 
+**Net Deposits**:
+Sum of an account's Balance Operations (deposits positive, withdrawals negative) — the capital put in.
+
+**Balance**:
+Net Deposits plus Net Profit — the account's money from closed trades. Excludes floating P/L of open trades (those are not collected), so it mirrors MT5 "Balance", not "Equity".
+_Avoid_: Equity
+
+**ROI**:
+Net Profit divided by Net Deposits, as a percentage. Undefined (shown as "—") when Net Deposits is zero or negative.
+
 **EA**:
 A trading strategy (Expert Advisor) identified by its MT5 magic number. Trades carry their magic number so profit can be broken down per EA; the User can give each magic number a friendly name.
 _Avoid_: Robot, strategy, magic (use "magic number" only for the raw id)
+
+**Profit Factor**:
+For a set of Trades: total Net Profit of winning Trades divided by the absolute total Net Profit of losing Trades. Shown as "∞" when there are no losing Trades. A live-data analogue of the Backtest's Profit Factor, computed from realized closed Trades.
+
+**Expectancy**:
+Average Net Profit per Trade for a set of Trades (total Net Profit ÷ Trade count), expressed in account currency. The expected money won or lost on a typical Trade.
+_Avoid_: Expected payoff (reserve that for the Backtest field of the same meaning)
+
+**Realized Drawdown**:
+The largest peak-to-trough drop in the cumulative Net Profit of an EA's closed Trades — reported both as an amount (account currency) and as a percentage of the running peak. Built from realized Trades only, so unlike a Backtest's Max Equity Drawdown it never includes floating losses of open positions. Kept as a distinct term to avoid confusion with that backtest-only measure.
+_Avoid_: Drawdown (ambiguous), Max Equity Drawdown (backtest-only)
 
 **User**:
 A person with a login to the dashboard. The system is multi-user; each User sees only their own Accounts and Trades. There is no public sign-up — Users are created by an Admin.
@@ -38,3 +66,19 @@ _Avoid_: API key (too generic), token
 
 **Account**:
 A single MT5 trading account connected to the system, owned by exactly one User. A User can have many Accounts.
+
+**Backtest**:
+The result of one MT5 Strategy Tester run, imported from an exported report file: a single EA on one symbol over a date range, with a specific set of inputs and a starting deposit, producing summary metrics and a series of Backtest Trades. Hypothetical data — owned directly by a User and never mixed into the live Net Profit, Balance, or ROI. Re-running the same EA with different settings produces separate Backtests. Its identity is the **Expert name** from the report (always present); the magic number is captured best-effort and, when it matches a named EA, links the Backtest to that EA — but the link is optional and never required to import.
+_Avoid_: Strategy Tester result, simulation
+
+**Backtest Trade**:
+One round-trip (entry + exit) within a Backtest, with its own profit. The backtest analogue of a Trade. Reconstructed from MT5's in/out Deals; never called a Deal.
+_Avoid_: Deal
+
+**Backtest Return**:
+A Backtest's net profit divided by its starting deposit, as a percentage. The fair way to rank Backtests whose starting deposits differ, and the headline comparison metric. The backtest analogue of ROI — kept as a separate term because ROI is reserved for live accounts (Net Profit over Net Deposits).
+_Avoid_: ROI (live-only)
+
+**Max Equity Drawdown**:
+The largest peak-to-trough drop in equity during a Backtest (MT5 "Equity Drawdown Maximal"), as a percentage. Treated as the real risk measure of a Backtest, because it captures floating losses an EA holds intra-trade — unlike Balance Drawdown, which only moves when trades close and can look deceptively small for grid/martingale EAs.
+_Avoid_: Drawdown (ambiguous — always say which)

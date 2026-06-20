@@ -65,8 +65,8 @@ public static class Analytics
         var wins = nets.Count(n => n > 0);
         var (ddAmount, ddPct) = Metrics.RealizedDrawdown(nets);
         var execs = trades.Where(t => t.ExecutionMs != null).Select(t => t.ExecutionMs!.Value).ToList();
-        int? avgExec = execs.Count > 0 ? (int)Math.Round(execs.Average()) : null;
-        int? maxExec = execs.Count > 0 ? execs.Max() : null;
+        decimal? avgExec = execs.Count > 0 ? Math.Round(execs.Average(), 1) : null;
+        decimal? maxExec = execs.Count > 0 ? Math.Round(execs.Max(), 1) : null;
 
         var curveFull = new List<object>();
         decimal run = 0m;

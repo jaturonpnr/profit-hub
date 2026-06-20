@@ -123,53 +123,44 @@ public class IngestTests(ApiFactory f) : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task ExecutionMs_is_stored_when_provided()
+    public async Task Ingest_stores_closing_order_ticket()
     {
         var (client, acc) = Setup();
         client.DefaultRequestHeaders.Add("X-Ingest-Key", acc.IngestKey);
-        var dealWithExecMs = new
+        var deal = new
         {
-            dealTicket = 50L, positionId = 50L, symbol = "XAUUSD.PRO", type = "buy",
+            dealTicket = 9100L, positionId = 9100L, symbol = "XAUUSD.PRO", type = "buy",
             lots = 0.26m, openPrice = 4499.46m, closePrice = 4500.02m,
             openTimeUtc = "2026-05-28T03:00:00Z", closeTimeUtc = "2026-05-28T03:06:00Z",
             grossProfit = 10m, commission = -1.2m, swap = 0m, magicNumber = 20231L, comment = "QQ",
-            executionMs = 513
+            closingOrderTicket = 61730462L
         };
-        await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { dealWithExecMs } });
+        await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { deal } });
         using var scope = _f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var trade = db.Trades.Single(t => t.AccountId == acc.Id && t.DealTicket == 50);
-        Assert.Equal(513, trade.ExecutionMs);
+        var trade = db.Trades.Single(t => t.AccountId == acc.Id && t.DealTicket == 9100);
+        Assert.Equal(61730462L, trade.ClosingOrderTicket);
     }
 
     [Fact]
-    public async Task ExecutionMs_sentinel_minus1_does_not_wipe_existing_value()
+    public async Task Resending_without_closing_order_ticket_keeps_existing()
     {
         var (client, acc) = Setup();
         client.DefaultRequestHeaders.Add("X-Ingest-Key", acc.IngestKey);
-        // First ingest: executionMs = 513
-        var firstSend = new
+        var withTicket = new
         {
-            dealTicket = 51L, positionId = 51L, symbol = "XAUUSD.PRO", type = "buy",
+            dealTicket = 9101L, positionId = 9101L, symbol = "XAUUSD.PRO", type = "buy",
             lots = 0.26m, openPrice = 4499.46m, closePrice = 4500.02m,
             openTimeUtc = "2026-05-28T03:00:00Z", closeTimeUtc = "2026-05-28T03:06:00Z",
             grossProfit = 10m, commission = -1.2m, swap = 0m, magicNumber = 20231L, comment = "QQ",
-            executionMs = 513
+            closingOrderTicket = 777L
         };
-        await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { firstSend } });
-        // Re-send same ticket with sentinel -1 (should NOT wipe the stored 513)
-        var reSend = new
-        {
-            dealTicket = 51L, positionId = 51L, symbol = "XAUUSD.PRO", type = "buy",
-            lots = 0.26m, openPrice = 4499.46m, closePrice = 4500.02m,
-            openTimeUtc = "2026-05-28T03:00:00Z", closeTimeUtc = "2026-05-28T03:06:00Z",
-            grossProfit = 10m, commission = -1.2m, swap = 0m, magicNumber = 20231L, comment = "QQ",
-            executionMs = -1
-        };
-        await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { reSend } });
+        await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { withTicket } });
+        // Re-send the same deal WITHOUT closingOrderTicket (Deal() omits it) — must not wipe it.
+        await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { Deal(9101) } });
+
         using var scope = _f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var trade = db.Trades.Single(t => t.AccountId == acc.Id && t.DealTicket == 51);
-        Assert.Equal(513, trade.ExecutionMs); // must still be 513, not null or overwritten
+        Assert.Equal(777L, db.Trades.Single(t => t.AccountId == acc.Id && t.DealTicket == 9101).ClosingOrderTicket);
     }
 }

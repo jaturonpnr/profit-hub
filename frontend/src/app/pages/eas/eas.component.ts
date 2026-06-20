@@ -86,7 +86,7 @@ interface Ea {
                   <div class="flex justify-between"><span class="text-text-faint">Max DD</span><span class="tabular-nums text-loss">{{ r.drawdownAmount | number:'1.0-0' }} ({{ r.drawdownPct | number:'1.0-1' }}%)</span></div>
                   <div class="flex justify-between"><span class="text-text-faint">Trades</span><span class="tabular-nums">{{ r.tradeCount }}</span></div>
                   <div class="flex justify-between"><span class="text-text-faint">Swap+Comm</span><span class="tabular-nums">{{ (r.swap + r.commission) | number:'1.2-2' }}</span></div>
-                  <div class="flex justify-between"><span class="text-text-faint">Avg exec</span><span class="tabular-nums">{{ r.avgExecutionMs != null ? (r.avgExecutionMs | number:'1.0-0') + ' ms' : '—' }}</span></div>
+                  <div class="flex justify-between"><span class="text-text-faint">Avg exec</span><span class="tabular-nums">{{ r.avgExecutionMs != null ? (r.avgExecutionMs | number:'1.0-1') + ' ms' : '—' }}</span></div>
                 </div>
               </div>
             </ui-card>
