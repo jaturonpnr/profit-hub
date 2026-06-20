@@ -102,7 +102,7 @@ interface Trade {
                   <th class="!text-right">Open</th>
                   <th class="!text-right">Close</th>
                   <th class="!text-right">Profit</th>
-                  <th class="!text-right">Exec (ms)</th>
+                  <th class="!text-right" title="Server fill time (ORDER_TIME_DONE − SETUP). Approximate — not the terminal journal's 'done in X ms'.">Fill ≈ (ms)</th>
                   <th>EA</th>
                   <th>Closed</th>
                 </tr>
