@@ -141,4 +141,26 @@ public class IngestTests(ApiFactory f) : IClassFixture<ApiFactory>
         var trade = db.Trades.Single(t => t.AccountId == acc.Id && t.DealTicket == 9100);
         Assert.Equal(61730462L, trade.ClosingOrderTicket);
     }
+
+    [Fact]
+    public async Task Resending_without_closing_order_ticket_keeps_existing()
+    {
+        var (client, acc) = Setup();
+        client.DefaultRequestHeaders.Add("X-Ingest-Key", acc.IngestKey);
+        var withTicket = new
+        {
+            dealTicket = 9101L, positionId = 9101L, symbol = "XAUUSD.PRO", type = "buy",
+            lots = 0.26m, openPrice = 4499.46m, closePrice = 4500.02m,
+            openTimeUtc = "2026-05-28T03:00:00Z", closeTimeUtc = "2026-05-28T03:06:00Z",
+            grossProfit = 10m, commission = -1.2m, swap = 0m, magicNumber = 20231L, comment = "QQ",
+            closingOrderTicket = 777L
+        };
+        await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { withTicket } });
+        // Re-send the same deal WITHOUT closingOrderTicket (Deal() omits it) — must not wipe it.
+        await client.PostAsJsonAsync("/api/ingest/deals", new { deals = new[] { Deal(9101) } });
+
+        using var scope = _f.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal(777L, db.Trades.Single(t => t.AccountId == acc.Id && t.DealTicket == 9101).ClosingOrderTicket);
+    }
 }

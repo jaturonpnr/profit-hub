@@ -55,4 +55,38 @@ public class ExecutionsTests(ApiFactory f) : IClassFixture<ApiFactory>
             new { items = new[] { new { orderTicket = 1L, executionMs = 1m } } });
         Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
     }
+
+    // Security: posting with account A's key must never touch account B's trade,
+    // even when both have the same ClosingOrderTicket.
+    [Fact]
+    public async Task Cannot_update_another_accounts_trade_with_same_order_ticket()
+    {
+        var keyA = Guid.NewGuid().ToString();
+        var keyB = Guid.NewGuid().ToString();
+        Guid bTradeAcc;
+        using (var scope = _f.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var userA = new User { Email = Guid.NewGuid() + "@x.com", PasswordHash = "x" };
+            var userB = new User { Email = Guid.NewGuid() + "@x.com", PasswordHash = "x" };
+            var accA = new Account { UserId = userA.Id, AccountNumber = 111, IngestKey = keyA };
+            var accB = new Account { UserId = userB.Id, AccountNumber = 222, IngestKey = keyB };
+            db.AddRange(userA, userB, accA, accB);
+            db.Trades.Add(new Trade { AccountId = accA.Id, DealTicket = 1, Symbol = "XAUUSD", Direction = "buy", ClosingOrderTicket = 5000 });
+            db.Trades.Add(new Trade { AccountId = accB.Id, DealTicket = 1, Symbol = "XAUUSD", Direction = "buy", ClosingOrderTicket = 5000 });
+            db.SaveChanges();
+            bTradeAcc = accB.Id;
+        }
+
+        var client = _f.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Ingest-Key", keyA);
+        var resp = await client.PostAsJsonAsync("/api/ingest/executions",
+            new { items = new[] { new { orderTicket = 5000L, executionMs = 250m } } });
+        var body = await resp.Content.ReadFromJsonAsync<Dictionary<string, int>>();
+        Assert.Equal(1, body!["matched"]); // only A's trade
+
+        using var s2 = _f.Services.CreateScope();
+        var db2 = s2.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Null(db2.Trades.Single(t => t.AccountId == bTradeAcc).ExecutionMs); // B untouched
+    }
 }

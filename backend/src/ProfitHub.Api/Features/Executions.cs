@@ -23,9 +23,13 @@ public static class Executions
             var acc = await db.Accounts.FirstOrDefaultAsync(a => a.IngestKey == key);
             if (acc is null) return Results.Unauthorized();
 
+            // Accept only sane values: a real fill is > 0 ms, and must fit numeric(9,3)
+            // (< 1,000,000 ms ≈ 16 min) — a log-parse glitch that produces 0 or a huge
+            // number is dropped rather than skewing averages or overflowing the column.
             var byOrder = new Dictionary<long, decimal>();
             foreach (var it in batch.Items)
-                if (it.OrderTicket > 0 && it.ExecutionMs >= 0) byOrder[it.OrderTicket] = it.ExecutionMs;
+                if (it.OrderTicket > 0 && it.ExecutionMs > 0 && it.ExecutionMs < 1_000_000m)
+                    byOrder[it.OrderTicket] = it.ExecutionMs;
 
             var orderIds = byOrder.Keys.ToArray();
             var trades = await db.Trades
@@ -41,7 +45,7 @@ public static class Executions
                     matched++;
                 }
 
-            await db.SaveChangesAsync();
+            if (matched > 0) await db.SaveChangesAsync();
             return Results.Ok(new { received = batch.Items.Length, matched });
         }).DisableAntiforgery();
     }
