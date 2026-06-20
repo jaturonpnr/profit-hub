@@ -102,7 +102,7 @@ interface Trade {
                   <th class="!text-right">Open</th>
                   <th class="!text-right">Close</th>
                   <th class="!text-right">Profit</th>
-                  <th class="!text-right" title="Server fill time (ORDER_TIME_DONE − SETUP). Approximate — not the terminal journal's 'done in X ms'.">Fill ≈ (ms)</th>
+                  <th class="!text-right">Exec (ms)</th>
                   <th>EA</th>
                   <th>Closed</th>
                 </tr>
@@ -132,7 +132,7 @@ interface Trade {
                       [class.text-profit]="t.netProfit >= 0"
                       [class.text-loss]="t.netProfit < 0"
                     >{{ t.netProfit >= 0 ? '+' : '' }}{{ t.netProfit | number:'1.2-2' }}</td>
-                    <td class="text-right tabular-nums text-text-muted">{{ t.executionMs != null ? (t.executionMs | number:'1.0-0') : '—' }}</td>
+                    <td class="text-right tabular-nums text-text-muted">{{ t.executionMs != null ? (t.executionMs | number:'1.0-3') : '—' }}</td>
                     <td><ui-badge variant="neutral">{{ t.magicNumber }}</ui-badge></td>
                     <td class="tabular-nums text-text-muted whitespace-nowrap">{{ t.closeTimeUtc | date:'short' }}</td>
                   </tr>

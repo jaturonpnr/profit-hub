@@ -50,8 +50,8 @@ const DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
           <div class="rounded-lg border border-border bg-surface p-4"><div class="text-xs text-text-faint">Trades</div><div class="mt-1 text-lg font-semibold tabular-nums">{{ ea.tradeCount }}</div></div>
           <div class="rounded-lg border border-border bg-surface p-4"><div class="text-xs text-text-faint">Swap</div><div class="mt-1 text-lg font-semibold tabular-nums">{{ ea.swap | number:'1.2-2' }}</div></div>
           <div class="rounded-lg border border-border bg-surface p-4"><div class="text-xs text-text-faint">Commission</div><div class="mt-1 text-lg font-semibold tabular-nums">{{ ea.commission | number:'1.2-2' }}</div></div>
-          <div class="rounded-lg border border-border bg-surface p-4"><div class="text-xs text-text-faint" title="Server fill time, approximate — not the journal's 'done in X ms'">Avg fill ≈</div><div class="mt-1 text-lg font-semibold tabular-nums">{{ ea.avgExecutionMs != null ? (ea.avgExecutionMs | number:'1.0-0') + ' ms' : '—' }}</div></div>
-          <div class="rounded-lg border border-border bg-surface p-4"><div class="text-xs text-text-faint" title="Server fill time, approximate — not the journal's 'done in X ms'">Max fill ≈</div><div class="mt-1 text-lg font-semibold tabular-nums">{{ ea.maxExecutionMs != null ? (ea.maxExecutionMs | number:'1.0-0') + ' ms' : '—' }}</div></div>
+          <div class="rounded-lg border border-border bg-surface p-4"><div class="text-xs text-text-faint">Avg exec</div><div class="mt-1 text-lg font-semibold tabular-nums">{{ ea.avgExecutionMs != null ? (ea.avgExecutionMs | number:'1.0-1') + ' ms' : '—' }}</div></div>
+          <div class="rounded-lg border border-border bg-surface p-4"><div class="text-xs text-text-faint">Max exec</div><div class="mt-1 text-lg font-semibold tabular-nums">{{ ea.maxExecutionMs != null ? (ea.maxExecutionMs | number:'1.0-1') + ' ms' : '—' }}</div></div>
         </div>
 
         <ui-card [hasHeader]="true">
