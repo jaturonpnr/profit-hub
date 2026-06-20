@@ -33,9 +33,24 @@ powershell -ExecutionPolicy Bypass -File Send-ExecutionTimes.ps1 `
   -LogDir "C:\Users\<you>\AppData\Roaming\MetaQuotes\Terminal\<HASH>\logs" `
   -AccountLogin 27505156
 ```
-It loops every 15s (override with `-IntervalSec`), tracks how far it has read (offset file
-in `%TEMP%`), and only advances after a successful POST. Safe to stop/restart — the backend
-is idempotent and re-reading a day's log just re-sends the same values.
+By default it follows **today's** log file only (`YYYYMMDD.log`) and rolls to the next
+day's file at midnight. It loops every 15s (override with `-IntervalSec`), tracks how far
+it has read (offset file in `%TEMP%`), and only advances after a successful POST. Safe to
+stop/restart — the backend is idempotent and re-reading a day's log just re-sends the same
+values.
+
+### Backfill older trades (one-time)
+Trades that closed **before today** won't get execution time from the default mode, because
+their `done in X ms` lines live in older log files it doesn't read. To fill them once, add
+`-Backfill`: it scans **every `*.log`** in the folder (oldest first), posts them all, then
+continues following today's file as usual.
+```powershell
+powershell -ExecutionPolicy Bypass -File Send-ExecutionTimes.ps1 -Backfill `
+  -ApiUrl "..." -IngestKey "..." -LogDir "...\logs" -AccountLogin 27505156
+```
+Run `-Backfill` **after** the EA redeploy + `ForceBackfill` (so `ClosingOrderTicket` is
+populated and lines can match). It's idempotent, so running it more than once is harmless.
+For the persistent Task Scheduler entry, use the plain (no `-Backfill`) command.
 
 ## Keep it running (Task Scheduler)
 Create a task that runs at startup:
