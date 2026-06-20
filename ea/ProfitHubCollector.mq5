@@ -126,29 +126,21 @@ void OnTimer()
          }
       }
 
-      // Execution latency of the order that closed this position: DONE - SETUP (ms).
-      // -1 when unavailable (order not in history / missing timestamps); backend maps -1 -> null.
-      // Read-only history access — never modifies orders/positions.
-      long execMs = -1;
-      if(HistoryOrderSelect(orders[j]))
-      {
-         long setupMsc = (long)HistoryOrderGetInteger(orders[j], ORDER_TIME_SETUP_MSC);
-         long doneMsc  = (long)HistoryOrderGetInteger(orders[j], ORDER_TIME_DONE_MSC);
-         if(setupMsc > 0 && doneMsc >= setupMsc) execMs = doneMsc - setupMsc;
-      }
-
+      // The closing order ticket lets the Execution Sidecar match the journal's
+      // "order #… done in X ms" line to this Trade. (The real execution time is not in
+      // history — see ADR 0005 — so the EA no longer computes a server-side estimate.)
       if(j > 0) json += ",";
       json += StringFormat(
         "{\"dealTicket\":%I64u,\"positionId\":%I64d,\"symbol\":\"%s\",\"type\":\"%s\","
         "\"lots\":%.3f,\"openPrice\":%.5f,\"closePrice\":%.5f,"
         "\"openTimeUtc\":\"%s\",\"closeTimeUtc\":\"%s\","
         "\"grossProfit\":%.2f,\"commission\":%.2f,\"swap\":%.2f,"
-        "\"magicNumber\":%I64d,\"comment\":\"%s\",\"executionMs\":%I64d}",
+        "\"magicNumber\":%I64d,\"comment\":\"%s\",\"closingOrderTicket\":%I64u}",
         tickets[j], posIds[j], EscapeJson(symbols[j]), typeStrs[j],
         lots[j], openPrice, closes[j],
         ToIsoUtc(openTime), ToIsoUtc(times[j]),
         profits[j], commission, swap,
-        magics[j], EscapeJson(comments[j]), execMs);
+        magics[j], EscapeJson(comments[j]), orders[j]);
    }
 
    if(Push("[" + json + "]"))
