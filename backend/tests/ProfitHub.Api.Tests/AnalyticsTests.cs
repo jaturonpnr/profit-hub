@@ -24,7 +24,7 @@ public class AnalyticsTests(ApiFactory f) : IClassFixture<ApiFactory>
         return (client, accountId);
     }
 
-    private void AddTrade(Guid accountId, long magic, decimal net, DateTime closeUtc, decimal commission = 0, decimal swap = 0, int? executionMs = null)
+    private void AddTrade(Guid accountId, long magic, decimal net, DateTime closeUtc, decimal commission = 0, decimal swap = 0, decimal? executionMs = null)
     {
         using var scope = _f.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -100,14 +100,14 @@ public class AnalyticsTests(ApiFactory f) : IClassFixture<ApiFactory>
     public async Task Ea_endpoints_expose_execution_metrics()
     {
         var (client, acc) = await SeedAccount();
-        AddTrade(acc, 5, 100m, new DateTime(2026, 1, 1, 9, 0, 0), executionMs: 400);
-        AddTrade(acc, 5, -50m, new DateTime(2026, 1, 2, 9, 0, 0), executionMs: 600);
+        AddTrade(acc, 5, 100m, new DateTime(2026, 1, 1, 9, 0, 0), executionMs: 400.5m);
+        AddTrade(acc, 5, -50m, new DateTime(2026, 1, 2, 9, 0, 0), executionMs: 600.7m);
 
         var eas = await client.GetFromJsonAsync<List<Dictionary<string, System.Text.Json.JsonElement>>>("/api/eas");
-        Assert.Equal(500, eas!.Single()["avgExecutionMs"].GetInt32());
+        Assert.Equal(500.6m, eas!.Single()["avgExecutionMs"].GetDecimal()); // (400.5+600.7)/2 = 500.6
 
         var detail = await client.GetFromJsonAsync<Dictionary<string, System.Text.Json.JsonElement>>("/api/eas/5");
-        Assert.Equal(500, detail!["avgExecutionMs"].GetInt32());
-        Assert.Equal(600, detail["maxExecutionMs"].GetInt32());
+        Assert.Equal(500.6m, detail!["avgExecutionMs"].GetDecimal());
+        Assert.Equal(600.7m, detail["maxExecutionMs"].GetDecimal());
     }
 }

@@ -84,7 +84,7 @@ public static class Reports
                 var wins = nets.Count(n => n > 0);
                 var (ddAmount, ddPct) = Metrics.RealizedDrawdown(nets);
                 var execs = ordered.Where(t => t.ExecutionMs != null).Select(t => t.ExecutionMs!.Value).ToList();
-                int? avgExec = execs.Count > 0 ? (int)Math.Round(execs.Average()) : null;
+                decimal? avgExec = execs.Count > 0 ? Math.Round(execs.Average(), 1) : null;
                 return new
                 {
                     magicNumber = grp.Key,
