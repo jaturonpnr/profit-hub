@@ -85,6 +85,17 @@ interface Editable extends PlanRow { amount: number; note: string; date: string;
                 <tr><td colspan="7"><div class="py-10 text-center text-sm text-text-faint">ยังไม่มีบัญชี</div></td></tr>
               }
             </tbody>
+            @if (rows().length) {
+            <tfoot>
+              <tr class="border-t-2 border-border font-semibold">
+                <td class="py-2.5">รวม</td>
+                <td class="text-right tabular-nums">{{ totalCapital() | number:'1.2-2' }}</td>
+                <td class="text-right tabular-nums" [class.text-profit]="totalSuggested() > 0">{{ totalSuggested() | number:'1.2-2' }}</td>
+                <td class="text-right tabular-nums text-brand-300">{{ totalAmount() | number:'1.2-2' }}</td>
+                <td colspan="3"></td>
+              </tr>
+            </tfoot>
+            }
           </table>
         </ui-table>
         }
@@ -114,6 +125,16 @@ interface Editable extends PlanRow { amount: number; note: string; date: string;
                 <tr><td colspan="7"><div class="py-8 text-center text-sm text-text-faint">ยังไม่มีประวัติ</div></td></tr>
               }
             </tbody>
+            @if (history().length) {
+            <tfoot>
+              <tr class="border-t-2 border-border font-semibold">
+                <td class="py-2.5" colspan="2">รวม ({{ history().length }} รายการ)</td>
+                <td class="text-right tabular-nums text-brand-300">{{ histTotalAmount() | number:'1.2-2' }}</td>
+                <td class="text-right tabular-nums text-text-muted">{{ histTotalSuggested() | number:'1.2-2' }}</td>
+                <td colspan="3"></td>
+              </tr>
+            </tfoot>
+            }
           </table>
         </ui-table>
       </ui-card>
@@ -182,6 +203,13 @@ export class WithdrawalsComponent implements OnInit {
       r.saving = false;
     }
   }
+
+  // Live totals (plain methods so they recompute each CD cycle as the amount inputs change).
+  totalCapital() { return this.rows().reduce((s, r) => s + (Number(r.capital) || 0), 0); }
+  totalSuggested() { return this.rows().reduce((s, r) => s + (Number(r.suggestedAmount) || 0), 0); }
+  totalAmount() { return this.rows().reduce((s, r) => s + (Number(r.amount) || 0), 0); }
+  histTotalAmount() { return this.history().reduce((s, h) => s + h.amount, 0); }
+  histTotalSuggested() { return this.history().reduce((s, h) => s + h.suggestedAmount, 0); }
 
   async remove(h: WithdrawalRow) {
     if (!confirm(`ลบรายการถอน ${h.amount} ของ ${h.accountName}?`)) return;
