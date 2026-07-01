@@ -53,4 +53,24 @@ public class DbContextTests
         Assert.Equal(63.516736m, read.SharpeRatio); // precision preserved, not truncated to 63.52
         Assert.Equal(new DateOnly(2026, 1, 1), read.PeriodFrom); // DateOnly round-trips on SQLite
     }
+
+    [Fact]
+    public async Task Can_persist_and_read_a_withdrawal()
+    {
+        using var ctx = TestDb.Create(out var conn);
+        using var _ = conn;
+        var user = new User { Email = Guid.NewGuid() + "@x.com", PasswordHash = "x" };
+        var acc = new Account { UserId = user.Id, AccountNumber = 111, IngestKey = "k-" + Guid.NewGuid() };
+        ctx.AddRange(user, acc);
+        ctx.Withdrawals.Add(new Withdrawal
+        {
+            AccountId = acc.Id, Amount = 900m, WithdrawnOn = new DateOnly(2026, 6, 26),
+            SuggestedAmount = 1000m, PeriodFrom = new DateOnly(2026, 6, 1), PeriodTo = new DateOnly(2026, 6, 26),
+            Capital = 5000m, Note = "june",
+        });
+        await ctx.SaveChangesAsync();
+        var w = await ctx.Withdrawals.SingleAsync(x => x.AccountId == acc.Id);
+        Assert.Equal(900m, w.Amount);
+        Assert.Equal(new DateOnly(2026, 6, 1), w.PeriodFrom);
+    }
 }
