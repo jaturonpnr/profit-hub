@@ -128,3 +128,20 @@ public class Backtest
     public string SourceFileName { get; set; } = "";
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
+
+/// A user-entered log of a profit withdrawal from an Account (see CONTEXT.md:
+/// Withdrawal Record). Planning/bookkeeping only — never affects Balance/Net
+/// Deposits/ROI. Snapshots the Suggested Amount + period + capital it was based on.
+public class Withdrawal
+{
+    public long Id { get; set; }
+    public Guid AccountId { get; set; }
+    public decimal Amount { get; set; }              // actual amount withdrawn
+    public DateOnly WithdrawnOn { get; set; }         // withdrawal date (editable)
+    public decimal SuggestedAmount { get; set; }      // snapshot: Net Profit over the period
+    public DateOnly PeriodFrom { get; set; }          // snapshot: profit period start
+    public DateOnly PeriodTo { get; set; }            // snapshot: profit period end
+    public decimal Capital { get; set; }              // snapshot: capital (Net Deposits) at save
+    public string Note { get; set; } = "";
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+}

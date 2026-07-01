@@ -17,5 +17,6 @@ public static class Endpoints
         Insights.Map(app);
         Backtests.Map(app);
         Executions.Map(app);
+        Withdrawals.Map(app);
     }
 }
