@@ -77,6 +77,7 @@ public static class Withdrawals
         g.MapPost("/", async (CreateReq req, ClaimsPrincipal user, AppDbContext db) =>
         {
             if (req.Amount <= 0) return Results.BadRequest(new { error = "amount must be > 0" });
+            if (req.PeriodFrom > req.PeriodTo) return Results.BadRequest(new { error = "period from must be on or before to" });
             var owns = await db.Accounts.AnyAsync(a => a.Id == req.AccountId && a.UserId == user.UserId());
             if (!owns) return Results.BadRequest(new { error = "unknown account" });
             var w = new Withdrawal
