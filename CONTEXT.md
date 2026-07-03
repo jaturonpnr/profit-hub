@@ -16,11 +16,15 @@ Gross Profit plus commission and swap of the Trade. The primary number shown on 
 _Avoid_: Profit (ambiguous), P/L (use only for period aggregates)
 
 **Execution Time**:
-How long it took to fill the order that closed a Trade, in milliseconds — the broker/VPS latency. Two distinct measurements exist and must not be conflated:
-- **Server fill time** (currently stored, shown as "fill ≈"): the closing order's `ORDER_TIME_DONE_MSC − ORDER_TIME_SETUP_MSC`, read from history by the collector EA. Server-side only (excludes the terminal↔server round trip), whole ms, approximate.
-- **Journal execution time** (target, not yet stored): the terminal-measured round trip reported as "order #… done in X ms" in the MT5 journal, sub-millisecond. Not present in trade/order history — obtainable only by a log-parsing sidecar process (the EA cannot read the journal: MQL5 file access is sandboxed to `MQL5/Files`).
-Captured only for the closing leg; unknown (null) until backfilled.
-_Avoid_: Latency (informal), ping
+How long it took to fill the order that closed a Trade, in milliseconds with 3 decimals — the terminal-measured round trip the MT5 journal reports as "order #… done in X ms". The single canonical execution-quality number. It is **not** present in trade/order history, so it is supplied by the Execution Sidecar that parses the journal; the collector EA only records the **Closing Order Ticket** used to match it. Unknown (null) for Trades the sidecar has not matched yet. (An earlier, abandoned approximation used the order's `DONE_MSC − SETUP_MSC` from history — a server-side figure that did not match the journal and is no longer stored.)
+_Avoid_: Latency (informal), ping, server fill time (the rejected proxy)
+
+**Closing Order Ticket**:
+MT5's id of the order that closed a Trade's position. Recorded so the Execution Sidecar can match a journal "order #…" line to its Trade. Distinct from Deal Ticket (a deal id, the idempotency key).
+
+**Execution Sidecar**:
+A standalone process on the user's VPS (PowerShell, no install) that tails the MT5 terminal journal log, extracts each "order #… done in X ms" line, and posts it to the backend to fill a Trade's Execution Time. A third ingestion path alongside the collector EA (live trades) and Backtest file upload — needed because the journal latency exists only in the log, which MQL5 cannot read.
+_Avoid_: Log parser (too generic)
 
 **Deal Ticket**:
 MT5's unique id for a closed deal. Used as the idempotency key — re-sending the same Trade never creates a duplicate.
@@ -28,6 +32,20 @@ MT5's unique id for a closed deal. Used as the idempotency key — re-sending th
 **Balance Operation**:
 A deposit or withdrawal on an account. Stored separately and never counted as profit.
 _Avoid_: Balance trade
+
+**Withdrawal Record**:
+A user-entered log of a profit withdrawal from an Account: the amount actually taken out, the withdrawal date, and a snapshot of the **Suggested Amount** (the Account's Net Profit over the chosen period — this-month-to-date by default), that period, and the capital it was based on. A planning and bookkeeping aid — it does **not** change Balance, Net Deposits, or ROI. The real money movement is captured independently as a Balance Operation when the EA ingests it, so counting a Withdrawal Record against the balance too would double-count. Withdrawing more than the Suggested Amount is allowed but flagged as dipping into capital.
+_Avoid_: Withdrawal (bare — ambiguous with the MT5 balance-operation withdrawal)
+
+**Suggested Amount**:
+The withdrawal a Withdrawal Record proposes by default: the Account's Net Profit over the selected period (the current calendar month to date unless a custom range is chosen). "Withdraw the profit, leave the capital." The user may edit the actual amount before saving.
+
+**Risk Level**:
+A named tolerance band for how much drawdown the User is willing to accept, expressed as a percentage of a user-entered capital figure: Very low 15%, Low 20%, Low–medium 30%, Medium 45% and 50%. Multiplying capital by the band's percentage gives the **Risk Budget** — the money the User accepts losing at that level. A pure planning aid: the capital is typed in (not read from an Account) and nothing is compared against real trading data or stored server-side.
+_Avoid_: DD% control (implies live enforcement, which this is not)
+
+**Risk Budget**:
+Capital × a Risk Level's drawdown percentage — the amount of money the User accepts losing at that Risk Level (e.g. 5,500 × 30% = 1,650). Displayed for every Risk Level at once for comparison, plus for a custom percentage.
 
 **Net Deposits**:
 Sum of an account's Balance Operations (deposits positive, withdrawals negative) — the capital put in.
