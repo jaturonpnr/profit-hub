@@ -73,6 +73,10 @@ interface EquityPoint { t: string; balance: number; }
           <div uiCardHeader class="flex items-center gap-2">
             <lucide-icon [img]="icons.GitCompare" class="h-4 w-4 text-brand-300"></lucide-icon>
             <h2 class="text-sm font-medium text-text-muted">Equity curve overlay — Backtest Return %</h2>
+            @if (selectedIds().length === 2) {
+              <a uiButton variant="secondary" size="sm" class="ml-auto"
+                 [routerLink]="['/backtests/compare']" [queryParams]="{ a: selectedIds()[0], b: selectedIds()[1] }">เทียบ settings</a>
+            }
           </div>
           <div class="px-2 pb-2 pt-4">
             <apx-chart

@@ -15,6 +15,7 @@ export const routes: Routes = [
       { path: 'risk', title: 'Risk Level', loadComponent: () => import('./pages/risk/risk.component').then(m => m.RiskComponent) },
       { path: 'eas/:magic', title: 'EA', loadComponent: () => import('./pages/eas/ea-detail.component').then(m => m.EaDetailComponent) },
       { path: 'backtests', title: 'Backtests', loadComponent: () => import('./pages/backtests/backtests.component').then(m => m.BacktestsComponent) },
+      { path: 'backtests/compare', title: 'เทียบ Backtest', loadComponent: () => import('./pages/backtests/backtest-compare.component').then(m => m.BacktestCompareComponent) },
       { path: 'backtests/:id', title: 'Backtest', loadComponent: () => import('./pages/backtests/backtest-detail.component').then(m => m.BacktestDetailComponent) },
       { path: 'users', title: 'Users', canActivate: [adminGuard], loadComponent: () => import('./pages/users/users.component').then(m => m.UsersComponent) },
       { path: 'settings', title: 'Settings', loadComponent: () => import('./pages/settings/settings.component').then(m => m.SettingsComponent) },
