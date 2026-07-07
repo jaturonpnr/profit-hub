@@ -10,6 +10,10 @@ public class BacktestParseException(string message) : Exception(message);
 /// One equity-curve point: a running balance at a point in time.
 public record EquityPoint(string T, decimal Balance);
 
+/// One EA input line from the report's settings block (see CONTEXT.md: EA Inputs).
+/// Section is the nearest preceding section marker ("" before the first marker).
+public record InputEntry(string Section, string Key, string Value);
+
 /// The parsed result of one MT5 Strategy Tester .xlsx, before persistence.
 public record ParsedBacktest
 {
@@ -35,6 +39,7 @@ public record ParsedBacktest
     public int TotalTrades { get; init; }
     public decimal WinRatePct { get; init; }
     public IReadOnlyList<EquityPoint> EquityCurve { get; init; } = [];
+    public IReadOnlyList<InputEntry> Inputs { get; init; } = [];
     public IReadOnlyDictionary<string, string> Raw { get; init; } = new Dictionary<string, string>();
 }
 
@@ -113,6 +118,7 @@ public static class BacktestParser
             TotalTrades = (int)Num(Get(kv, "totalTrades")),
             WinRatePct = PercentInParens(Get(kv, "profitTrades")),
             EquityCurve = ParseEquityCurve(grid),
+            Inputs = ParseInputs(grid),
             Raw = kv,
         };
     }
@@ -213,6 +219,63 @@ public static class BacktestParser
                 if (m.Success && long.TryParse(m.Groups[1].Value, out var v)) return v;
             }
         return null;
+    }
+
+    // Labels that begin the inputs region (cell ending ':') and any label cell that ends it.
+    private static readonly string[] InputsLabel = ["inputs", "ค่าตัวแปร"];
+
+    // The inputs region: starts at the row whose first labelled cell is Inputs/ค่าตัวแปร
+    // (the value cell on that same row is the FIRST entry), then continues over rows whose
+    // first non-empty cell is a bare "key=value" (no ':' label on the row), and stops at
+    // the next labelled row (e.g. Company:/บริษัท:). Section markers group what follows:
+    // a value starting with ">>>" (e.g. "lineRisk=>>> Risk Management") or an empty value
+    // (e.g. "OTHER SETTINGS=", "input group #1=") starts a new section.
+    private static IReadOnlyList<InputEntry> ParseInputs(string[][] grid)
+    {
+        var entries = new List<InputEntry>();
+        var started = false;
+        var section = "";
+        foreach (var row in grid)
+        {
+            var cells = row.Where(c => c.Length > 0).ToArray();
+            if (cells.Length == 0) continue;
+            var hasLabel = cells.Any(c => c.EndsWith(':'));
+
+            if (!started)
+            {
+                if (hasLabel && InputsLabel.Contains(Normalize(cells[0])))
+                {
+                    started = true;
+                    if (cells.Length > 1) AddEntry(cells[1], entries, ref section);
+                }
+                continue;
+            }
+
+            if (hasLabel) break;                    // next labelled row ends the region
+            AddEntry(cells[0], entries, ref section);
+        }
+        return entries;
+    }
+
+    private static void AddEntry(string cell, List<InputEntry> entries, ref string section)
+    {
+        var eq = cell.IndexOf('=');
+        if (eq < 0) return;                          // not a key=value line — ignore
+        var key = cell[..eq].Trim();
+        var value = cell[(eq + 1)..].Trim();
+        if (value.StartsWith(">>>"))                 // "lineRisk=>>> Risk Management"
+        {
+            section = value.TrimStart('>', ' ').Trim();
+            return;
+        }
+        if (value.Length == 0)                       // "OTHER SETTINGS=", "input group #1="
+        {
+            // Separator-only keys (e.g. "lineRiskSkip") produce empty sections users
+            // don't care about; still switch section so following keys group correctly.
+            section = key.Trim();
+            return;
+        }
+        entries.Add(new InputEntry(section, key, value));
     }
 
     // Read the deals table ("การซื้อขาย"/"Deals"): each row's running "Balance" column

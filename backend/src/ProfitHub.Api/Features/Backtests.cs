@@ -30,7 +30,10 @@ public static class Backtests
             List<EquityPoint> curve;
             try { curve = JsonSerializer.Deserialize<List<EquityPoint>>(b.EquityCurveJson) ?? []; }
             catch (JsonException) { curve = []; }
-            return Results.Ok(new { summary = ToSummaryFn(b), equityCurve = curve });
+            List<InputEntry> inputs;
+            try { inputs = JsonSerializer.Deserialize<List<InputEntry>>(b.InputsJson ?? "[]") ?? []; }
+            catch (JsonException) { inputs = []; }
+            return Results.Ok(new { summary = ToSummaryFn(b), equityCurve = curve, inputs });
         });
 
         // Upload — multipart/form-data, field name "file".
@@ -82,6 +85,7 @@ public static class Backtests
                 WinRatePct = parsed.WinRatePct,
                 EquityCurveJson = JsonSerializer.Serialize(parsed.EquityCurve),
                 RawMetricsJson = JsonSerializer.Serialize(parsed.Raw),
+                InputsJson = JsonSerializer.Serialize(parsed.Inputs),
                 SourceFileName = file.FileName,
             };
             db.Backtests.Add(b);

@@ -60,6 +60,30 @@ public class BacktestParserTests
         Assert.True(r.EquityCurve.Count <= 1000); // downsampled cap
     }
 
+    [Fact]
+    public void Parses_ea_inputs_grouped_by_section()
+    {
+        var r = ParseFixture("omg.xlsx");
+        Assert.Contains(r.Inputs, i => i.Key == "MAGIC" && i.Value == "7337");
+        var sl = r.Inputs.Single(i => i.Key == "InpSlUSD");
+        Assert.Equal("30.0", sl.Value);
+        var autoLot = r.Inputs.Single(i => i.Key == "Inp_auto_lot");
+        Assert.Equal("Risk Management", autoLot.Section);   // from "lineRisk=>>> Risk Management"
+        Assert.Contains(r.Inputs, i => i.Section == "Permitted Days" && i.Key == "Inp_TradeSunday");
+        // KPIs of the new fixture still parse (sanity)
+        Assert.Equal("Quantum OmniGold", r.ExpertName);
+        Assert.Equal(2485.91m, r.NetProfit);
+        Assert.Equal(7337L, r.MagicNumber);
+    }
+
+    [Fact]
+    public void Parses_thai_report_inputs_too()
+    {
+        var r = ParseFixture("qa.xlsx");
+        Assert.Contains(r.Inputs, i => i.Key == "InpMagicNumber" && i.Value == "5442");
+        Assert.Contains(r.Inputs, i => i.Key == "InpLotsFixed"); // grouped under "input group #1"
+    }
+
     private static Stream EnglishReportXlsx()
     {
         using var wb = new XLWorkbook();

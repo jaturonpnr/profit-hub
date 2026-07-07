@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace ProfitHub.Api.Tests;
 
@@ -34,6 +35,24 @@ public class BacktestsTests(ApiFactory f) : IClassFixture<ApiFactory>
         var detail = await client.GetFromJsonAsync<JsonDetail>($"/api/backtests/{id}");
         Assert.NotEmpty(detail!.equityCurve);
         Assert.Equal("Quantum Athena", detail.summary.expertName);
+    }
+
+    [Fact]
+    public async Task Detail_includes_ea_inputs()
+    {
+        var client = await AuthedClient.Create(_f);
+
+        var post = await client.PostAsync("/api/backtests", Upload("omg.xlsx"));
+        post.EnsureSuccessStatusCode();
+        var created = await post.Content.ReadFromJsonAsync<Dictionary<string, object>>();
+        var id = created!["id"].ToString();
+
+        var detail = await client.GetFromJsonAsync<JsonElement>($"/api/backtests/{id}");
+        var inputs = detail.GetProperty("inputs");
+        Assert.True(inputs.GetArrayLength() > 0);
+        // Entries serialize as camelCase { section, key, value }
+        Assert.Contains(inputs.EnumerateArray(), i =>
+            i.GetProperty("key").GetString() == "MAGIC" && i.GetProperty("value").GetString() == "7337");
     }
 
     [Fact]
