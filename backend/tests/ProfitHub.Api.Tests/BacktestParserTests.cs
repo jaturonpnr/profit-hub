@@ -60,6 +60,30 @@ public class BacktestParserTests
         Assert.True(r.EquityCurve.Count <= 1000); // downsampled cap
     }
 
+    [Fact]
+    public void Parses_ea_inputs_grouped_by_section()
+    {
+        var r = ParseFixture("omg.xlsx");
+        Assert.Contains(r.Inputs, i => i.Key == "MAGIC" && i.Value == "7337");
+        var sl = r.Inputs.Single(i => i.Key == "InpSlUSD");
+        Assert.Equal("30.0", sl.Value);
+        var autoLot = r.Inputs.Single(i => i.Key == "Inp_auto_lot");
+        Assert.Equal("Risk Management", autoLot.Section);   // from "lineRisk=>>> Risk Management"
+        Assert.Contains(r.Inputs, i => i.Section == "Permitted Days" && i.Key == "Inp_TradeSunday");
+        // KPIs of the new fixture still parse (sanity)
+        Assert.Equal("Quantum OmniGold", r.ExpertName);
+        Assert.Equal(2485.91m, r.NetProfit);
+        Assert.Equal(7337L, r.MagicNumber);
+    }
+
+    [Fact]
+    public void Parses_thai_report_inputs_too()
+    {
+        var r = ParseFixture("qa.xlsx");
+        Assert.Contains(r.Inputs, i => i.Key == "InpMagicNumber" && i.Value == "5442");
+        Assert.Contains(r.Inputs, i => i.Key == "InpLotsFixed"); // grouped under "input group #1"
+    }
+
     private static Stream EnglishReportXlsx()
     {
         using var wb = new XLWorkbook();
@@ -99,6 +123,29 @@ public class BacktestParserTests
         Assert.Equal(70.00m, r.WinRatePct);
         Assert.Equal(777L, r.MagicNumber);
         Assert.Equal(2500.50m, r.EquityCurve[^1].Balance);
+        // This synthetic report has no "Inputs:" label row — the inputs pass must yield
+        // an empty list, not crash or capture stray key=value lines outside the region.
+        Assert.Empty(r.Inputs);
+    }
+
+    [Fact]
+    public void Input_value_containing_equals_splits_on_first_equals_only()
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("Sheet1");
+        void Put(int r, params string[] cells) { for (var c = 0; c < cells.Length; c++) ws.Cell(r, c + 1).Value = cells[c]; }
+        Put(1, "Strategy Tester Report");
+        Put(2, "Settings");
+        Put(3, "Expert:", "My EA");
+        Put(4, "Inputs:", "InpComment=QQ=v2");
+        Put(5, "InpFormula=a=b+c");
+        Put(6, "Company:", "X");
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        ms.Position = 0;
+        var r = BacktestParser.Parse(ms);
+        Assert.Equal("QQ=v2", r.Inputs.Single(i => i.Key == "InpComment").Value);
+        Assert.Equal("a=b+c", r.Inputs.Single(i => i.Key == "InpFormula").Value);
     }
 
     [Fact]
