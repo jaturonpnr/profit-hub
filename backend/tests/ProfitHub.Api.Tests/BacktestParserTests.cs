@@ -123,6 +123,29 @@ public class BacktestParserTests
         Assert.Equal(70.00m, r.WinRatePct);
         Assert.Equal(777L, r.MagicNumber);
         Assert.Equal(2500.50m, r.EquityCurve[^1].Balance);
+        // This synthetic report has no "Inputs:" label row — the inputs pass must yield
+        // an empty list, not crash or capture stray key=value lines outside the region.
+        Assert.Empty(r.Inputs);
+    }
+
+    [Fact]
+    public void Input_value_containing_equals_splits_on_first_equals_only()
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("Sheet1");
+        void Put(int r, params string[] cells) { for (var c = 0; c < cells.Length; c++) ws.Cell(r, c + 1).Value = cells[c]; }
+        Put(1, "Strategy Tester Report");
+        Put(2, "Settings");
+        Put(3, "Expert:", "My EA");
+        Put(4, "Inputs:", "InpComment=QQ=v2");
+        Put(5, "InpFormula=a=b+c");
+        Put(6, "Company:", "X");
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        ms.Position = 0;
+        var r = BacktestParser.Parse(ms);
+        Assert.Equal("QQ=v2", r.Inputs.Single(i => i.Key == "InpComment").Value);
+        Assert.Equal("a=b+c", r.Inputs.Single(i => i.Key == "InpFormula").Value);
     }
 
     [Fact]
