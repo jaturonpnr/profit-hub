@@ -68,6 +68,9 @@ public class BacktestsTests(ApiFactory f) : IClassFixture<ApiFactory>
         var detail = await client.GetFromJsonAsync<JsonElement>($"/api/backtests/{id}");
         Assert.True(detail.GetProperty("heatmap").GetArrayLength() > 0);
         Assert.True(detail.GetProperty("monthly").GetArrayLength() > 0);
+        // Month keys must be Gregorian ("2026-05"), NOT the host locale's calendar —
+        // a Thai-locale host renders the Buddhist year ("2569-05") without InvariantCulture.
+        Assert.Equal("2026-05", detail.GetProperty("monthly")[0].GetProperty("month").GetString());
         Assert.Equal("384.6", detail.GetProperty("tradeStats").GetProperty("largestWin").GetString());
     }
 

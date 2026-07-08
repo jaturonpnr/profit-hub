@@ -39,8 +39,11 @@ public static class Backtests
 
             // Day-of-week (0=Mon) × hour heatmap + monthly buckets, broker-file time
             // AS-IS (no timezone conversion — see plan: broker time as-is).
+            // InvariantCulture on BOTH parse and format: on a Thai-locale host the
+            // ambient culture uses the Buddhist calendar, turning "2026-05" into "2569-05".
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
             var heatmap = trades
-                .Select(t => (dt: DateTime.Parse(t.T), t.Profit))
+                .Select(t => (dt: DateTime.Parse(t.T, inv), t.Profit))
                 .GroupBy(x => (dow: ((int)x.dt.DayOfWeek + 6) % 7, x.dt.Hour))
                 .Select(g => new
                 {
@@ -51,7 +54,7 @@ public static class Backtests
                 })
                 .ToList();
             var monthly = trades
-                .GroupBy(t => DateTime.Parse(t.T).ToString("yyyy-MM"))
+                .GroupBy(t => DateTime.Parse(t.T, inv).ToString("yyyy-MM", inv))
                 .OrderBy(g => g.Key)
                 .Select(g => new
                 {
