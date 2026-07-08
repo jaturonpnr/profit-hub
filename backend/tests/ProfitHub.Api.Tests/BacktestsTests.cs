@@ -56,6 +56,25 @@ public class BacktestsTests(ApiFactory f) : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task Detail_includes_trade_analytics()
+    {
+        var client = await AuthedClient.Create(_f);
+
+        var post = await client.PostAsync("/api/backtests", Upload("omg.xlsx"));
+        post.EnsureSuccessStatusCode();
+        var created = await post.Content.ReadFromJsonAsync<Dictionary<string, object>>();
+        var id = created!["id"].ToString();
+
+        var detail = await client.GetFromJsonAsync<JsonElement>($"/api/backtests/{id}");
+        Assert.True(detail.GetProperty("heatmap").GetArrayLength() > 0);
+        Assert.True(detail.GetProperty("monthly").GetArrayLength() > 0);
+        // Month keys must be Gregorian ("2026-05"), NOT the host locale's calendar —
+        // a Thai-locale host renders the Buddhist year ("2569-05") without InvariantCulture.
+        Assert.Equal("2026-05", detail.GetProperty("monthly")[0].GetProperty("month").GetString());
+        Assert.Equal("384.6", detail.GetProperty("tradeStats").GetProperty("largestWin").GetString());
+    }
+
+    [Fact]
     public async Task Upload_garbage_returns_400()
     {
         var client = await AuthedClient.Create(_f);

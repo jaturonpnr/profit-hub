@@ -13,8 +13,24 @@ import { BacktestSummary } from './backtests.component';
 
 interface EquityPoint { t: string; balance: number; }
 interface InputEntry { section: string; key: string; value: string; }
+interface HeatCell { dow: number; hour: number; netProfit: number; tradeCount: number; }
+interface MonthlyRow { month: string; netProfit: number; tradeCount: number; }
 
-/** Backtest detail — full KPIs + balance-over-time equity curve. */
+const DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+/** Trade-stat tiles in display order; keys match backend tradeStats map. */
+const STAT_TILES: { key: string; label: string; loss?: boolean }[] = [
+  { key: 'largestWin', label: 'ไม้กำไรใหญ่สุด' },
+  { key: 'largestLoss', label: 'ไม้ขาดทุนใหญ่สุด', loss: true },
+  { key: 'avgWin', label: 'กำไรเฉลี่ย/ไม้' },
+  { key: 'avgLoss', label: 'ขาดทุนเฉลี่ย/ไม้', loss: true },
+  { key: 'maxConsecWins', label: 'ชนะติดกันสูงสุด' },
+  { key: 'maxConsecLosses', label: 'แพ้ติดกันสูงสุด' },
+  { key: 'avgHolding', label: 'เวลาถือเฉลี่ย' },
+  { key: 'maxHolding', label: 'ถือนานสุด' },
+];
+
+/** Backtest detail — full KPIs + trade stats + equity curve + heatmap + monthly. */
 @Component({
   selector: 'ph-backtest-detail',
   standalone: true,
@@ -73,12 +89,71 @@ interface InputEntry { section: string; key: string; value: string; }
           </div>
         </div>
 
+        @if (statTiles().length > 0) {
+          <ui-card [hasHeader]="true">
+            <div uiCardHeader><h2 class="text-sm font-medium text-text-muted">สถิติรายไม้</h2></div>
+            <div class="grid grid-cols-2 gap-4 px-4 pb-4 pt-3 sm:grid-cols-3 lg:grid-cols-4">
+              @for (t of statTiles(); track t.key) {
+                <div>
+                  <div class="text-xs text-text-faint">{{ t.label }}</div>
+                  <div class="mt-1 text-sm font-semibold tabular-nums" [class.text-loss]="t.loss">{{ t.value }}</div>
+                </div>
+              }
+            </div>
+          </ui-card>
+        }
+
         <ui-card [hasHeader]="true">
           <div uiCardHeader><h2 class="text-sm font-medium text-text-muted">Equity curve (balance over time)</h2></div>
           <div class="px-2 pb-2 pt-4">
             <apx-chart [series]="series()" [chart]="chart" [colors]="['#8b5cf6']" [fill]="fill" [stroke]="stroke" [dataLabels]="dataLabels" [grid]="grid" [xaxis]="xaxis" [yaxis]="yaxis" [tooltip]="tooltip"></apx-chart>
           </div>
         </ui-card>
+
+        @if (heatmap().length > 0) {
+          <ui-card [hasHeader]="true">
+            <div uiCardHeader><h2 class="text-sm font-medium text-text-muted">By day &amp; hour (broker time)</h2></div>
+            <div class="overflow-x-auto px-2 pb-3 pt-3">
+              <table class="border-separate border-spacing-0.5 text-[10px]">
+                <thead><tr><th class="px-1 text-text-faint"></th>@for (h of hours; track h) { <th class="px-0.5 text-center font-normal text-text-faint">{{ h }}</th> }</tr></thead>
+                <tbody>
+                  @for (dw of dows; track dw; let i = $index) {
+                    <tr>
+                      <td class="pr-1 text-right font-medium text-text-faint">{{ dw }}</td>
+                      @for (h of hours; track h) {
+                        <td class="h-5 w-5 rounded-sm" [style.background]="heatBg(i, h)" [title]="heatTitle(i, h)"></td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </ui-card>
+        } @else if (statTiles().length > 0) {
+          <ui-card>
+            <div class="px-4 py-3 text-sm text-text-faint">อัปโหลดไฟล์นี้ใหม่อีกครั้งเพื่อดู heatmap และกำไรรายเดือนรายไม้</div>
+          </ui-card>
+        }
+
+        @if (monthly().length > 0) {
+          <ui-card [hasHeader]="true">
+            <div uiCardHeader><h2 class="text-sm font-medium text-text-muted">กำไรรายเดือน (backtest)</h2></div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead><tr class="text-text-faint"><th class="px-3 py-2 text-left">เดือน</th><th class="px-3 py-2 text-right">Net Profit</th><th class="px-3 py-2 text-right">ไม้</th></tr></thead>
+                <tbody>
+                  @for (m of monthly(); track m.month) {
+                    <tr class="border-t border-border-subtle">
+                      <td class="px-3 py-1.5 tabular-nums text-text-muted">{{ m.month }}</td>
+                      <td class="px-3 py-1.5 text-right tabular-nums" [class.text-profit]="m.netProfit >= 0" [class.text-loss]="m.netProfit < 0">{{ m.netProfit | number:'1.2-2' }}</td>
+                      <td class="px-3 py-1.5 text-right tabular-nums">{{ m.tradeCount }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </ui-card>
+        }
 
         @if (inputs().length > 0) {
           <ui-card [hasHeader]="true">
@@ -112,7 +187,19 @@ export class BacktestDetailComponent implements OnInit {
   loading = signal(true);
   private points = signal<EquityPoint[]>([]);
   inputs = signal<InputEntry[]>([]);
+  tradeStats = signal<Record<string, string>>({});
+  heatmap = signal<HeatCell[]>([]);
+  monthly = signal<MonthlyRow[]>([]);
   readonly icons = { ArrowLeft };
+  readonly dows = DOW;
+  readonly hours = Array.from({ length: 24 }, (_, i) => i);
+
+  // Tiles in fixed order, skipping keys absent from the report.
+  statTiles = computed(() => {
+    const stats = this.tradeStats();
+    return STAT_TILES.filter(t => stats[t.key] !== undefined && stats[t.key] !== '')
+      .map(t => ({ ...t, value: stats[t.key] }));
+  });
 
   // Inputs grouped by section, preserving report order ("" section → "Settings").
   sections = computed(() => {
@@ -130,13 +217,34 @@ export class BacktestDetailComponent implements OnInit {
   async ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id')!;
     try {
-      const d = await firstValueFrom(this.api.get<{ summary: BacktestSummary; equityCurve: EquityPoint[]; inputs: InputEntry[] }>(`/api/backtests/${id}`));
+      const d = await firstValueFrom(this.api.get<{
+        summary: BacktestSummary; equityCurve: EquityPoint[]; inputs: InputEntry[];
+        tradeStats: Record<string, string>; heatmap: HeatCell[]; monthly: MonthlyRow[];
+      }>(`/api/backtests/${id}`));
       this.s.set(d.summary);
       this.points.set(d.equityCurve);
       this.inputs.set(d.inputs ?? []);
+      this.tradeStats.set(d.tradeStats ?? {});
+      this.heatmap.set(d.heatmap ?? []);
+      this.monthly.set(d.monthly ?? []);
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private maxAbsHeat = computed(() => Math.max(1, ...this.heatmap().map(c => Math.abs(c.netProfit))));
+  // O(1) lookup keyed by "dow-hour", rebuilt only when the backtest changes (vs .find() per cell per CD cycle).
+  private heatMap = computed(() => new Map(this.heatmap().map(c => [`${c.dow}-${c.hour}`, c])));
+  private heatCell(dow: number, hour: number) { return this.heatMap().get(`${dow}-${hour}`); }
+  heatBg(dow: number, hour: number): string {
+    const c = this.heatCell(dow, hour);
+    if (!c) return 'rgba(255,255,255,0.03)';
+    const a = Math.min(0.85, 0.15 + 0.7 * Math.abs(c.netProfit) / this.maxAbsHeat());
+    return c.netProfit >= 0 ? `rgba(48,164,108,${a})` : `rgba(229,72,77,${a})`;
+  }
+  heatTitle(dow: number, hour: number): string {
+    const c = this.heatCell(dow, hour);
+    return c ? `${DOW[dow]} ${hour}:00 — ${c.netProfit.toFixed(2)} (${c.tradeCount})` : '';
   }
 
   series = computed<ApexAxisChartSeries>(() => [{

@@ -125,6 +125,7 @@ public class Backtest
     public string EquityCurveJson { get; set; } = "[]";  // [{ "t": "2026-01-01T00:00:00", "balance": 1500 }, ...]
     public string RawMetricsJson { get; set; } = "{}";   // every parsed label→value, future-proofing
     public string InputsJson { get; set; } = "[]";   // ordered [{section,key,value}] EA Inputs
+    public string TradesJson { get; set; } = "[]";   // [{t,dir,lots,profit}] per closing deal (Backtest Trades)
 
     public string SourceFileName { get; set; } = "";
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

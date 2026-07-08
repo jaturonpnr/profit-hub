@@ -84,6 +84,28 @@ public class BacktestParserTests
         Assert.Contains(r.Inputs, i => i.Key == "InpLotsFixed"); // grouped under "input group #1"
     }
 
+    [Fact]
+    public void Emits_backtest_trades_that_reconcile_with_net_profit_omg()
+    {
+        var r = ParseFixture("omg.xlsx");
+        Assert.Equal(49, r.Trades.Count);                 // report: Total Trades 49
+        Assert.All(r.Trades, t => Assert.Contains(t.Dir, new[] { "buy", "sell" }));
+        // Invariant: per-trade profits (incl. commission/swap of both legs) sum to
+        // the report's Total Net Profit exactly.
+        Assert.Equal(2485.91m, Math.Round(r.Trades.Sum(t => t.Profit), 2));
+        Assert.StartsWith("2026-05-", r.Trades[0].T);
+        Assert.All(r.Trades, t => Assert.True(t.Lots > 0));
+    }
+
+    [Fact]
+    public void Emits_backtest_trades_that_reconcile_with_net_profit_qa()
+    {
+        var r = ParseFixture("qa.xlsx");
+        Assert.Equal(306, r.Trades.Count);                // report: Total Trades 306
+        Assert.All(r.Trades, t => Assert.Contains(t.Dir, new[] { "buy", "sell" }));
+        Assert.Equal(3950.68m, Math.Round(r.Trades.Sum(t => t.Profit), 2));
+    }
+
     private static Stream EnglishReportXlsx()
     {
         using var wb = new XLWorkbook();

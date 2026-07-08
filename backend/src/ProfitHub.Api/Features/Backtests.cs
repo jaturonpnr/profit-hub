@@ -33,7 +33,39 @@ public static class Backtests
             List<InputEntry> inputs;
             try { inputs = JsonSerializer.Deserialize<List<InputEntry>>(b.InputsJson ?? "[]") ?? []; }
             catch (JsonException) { inputs = []; }
-            return Results.Ok(new { summary = ToSummaryFn(b), equityCurve = curve, inputs });
+            List<BtTrade> trades;
+            try { trades = JsonSerializer.Deserialize<List<BtTrade>>(string.IsNullOrEmpty(b.TradesJson) ? "[]" : b.TradesJson) ?? []; }
+            catch (JsonException) { trades = []; }
+
+            // Day-of-week (0=Mon) × hour heatmap + monthly buckets, broker-file time
+            // AS-IS (no timezone conversion — see plan: broker time as-is).
+            // InvariantCulture on BOTH parse and format: on a Thai-locale host the
+            // ambient culture uses the Buddhist calendar, turning "2026-05" into "2569-05".
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            var heatmap = trades
+                .Select(t => (dt: DateTime.Parse(t.T, inv), t.Profit))
+                .GroupBy(x => (dow: ((int)x.dt.DayOfWeek + 6) % 7, x.dt.Hour))
+                .Select(g => new
+                {
+                    g.Key.dow,
+                    hour = g.Key.Hour,
+                    netProfit = Math.Round(g.Sum(x => x.Profit), 2),
+                    tradeCount = g.Count(),
+                })
+                .ToList();
+            var monthly = trades
+                .GroupBy(t => DateTime.Parse(t.T, inv).ToString("yyyy-MM", inv))
+                .OrderBy(g => g.Key)
+                .Select(g => new
+                {
+                    month = g.Key,
+                    netProfit = Math.Round(g.Sum(x => x.Profit), 2),
+                    tradeCount = g.Count(),
+                })
+                .ToList();
+            var tradeStats = BuildTradeStats(b.RawMetricsJson);
+
+            return Results.Ok(new { summary = ToSummaryFn(b), equityCurve = curve, inputs, tradeStats, heatmap, monthly });
         });
 
         // Upload — multipart/form-data, field name "file".
@@ -86,6 +118,7 @@ public static class Backtests
                 EquityCurveJson = JsonSerializer.Serialize(parsed.EquityCurve),
                 RawMetricsJson = JsonSerializer.Serialize(parsed.Raw),
                 InputsJson = JsonSerializer.Serialize(parsed.Inputs),
+                TradesJson = JsonSerializer.Serialize(parsed.Trades),
                 SourceFileName = file.FileName,
             };
             db.Backtests.Add(b);
@@ -102,6 +135,34 @@ public static class Backtests
             await db.SaveChangesAsync();
             return Results.NoContent();
         });
+    }
+
+    // Bilingual label map: RawMetricsJson keys (lowercased labels from BuildKeyValues)
+    // → stable stat keys. Values are the report's raw strings (e.g. "384.6",
+    // "30 (2 711.33)", "1:48:37") — displayed as-is, no numeric parsing. Works for
+    // backtests uploaded before TradesJson existed, since Raw has been stored since v1.
+    private static readonly (string KeyOut, string[] Labels)[] StatLabels =
+    [
+        ("largestWin",  ["largest profit trade", "สูงสุด การซื้อขายที่กำไร"]),
+        ("largestLoss", ["largest loss trade", "สูงสุด การซื้อขายที่ขาดทุน"]),
+        ("avgWin",      ["average profit trade", "เฉลี่ย การซื้อขายที่กำไร"]),
+        ("avgLoss",     ["average loss trade", "เฉลี่ย การซื้อขายที่ขาดทุน"]),
+        ("maxConsecWins",   ["maximum consecutive wins ($)", "สูงสุด กำไรติดต่อกัน ($)"]),
+        ("maxConsecLosses", ["maximum consecutive losses ($)", "สูงสุด ขาดทุนติดต่อกัน ($)"]),
+        ("avgHolding",  ["average position holding time", "เวลาถือสถานะเฉลี่ย"]),
+        ("maxHolding",  ["maximal position holding time", "เวลาถือสถานะสูงสุด"]),
+    ];
+
+    private static Dictionary<string, string> BuildTradeStats(string? rawMetricsJson)
+    {
+        Dictionary<string, string> raw;
+        try { raw = JsonSerializer.Deserialize<Dictionary<string, string>>(string.IsNullOrEmpty(rawMetricsJson) ? "{}" : rawMetricsJson) ?? []; }
+        catch (JsonException) { raw = []; }
+        var stats = new Dictionary<string, string>();
+        foreach (var (keyOut, labels) in StatLabels)
+            foreach (var label in labels)
+                if (raw.TryGetValue(label.ToLowerInvariant(), out var v)) { stats[keyOut] = v; break; }
+        return stats;
     }
 
     /// Light DTO for list + detail. Serializes to camelCase JSON (Web defaults), so the
