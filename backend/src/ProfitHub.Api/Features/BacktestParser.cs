@@ -10,6 +10,11 @@ public class BacktestParseException(string message) : Exception(message);
 /// One equity-curve point: a running balance at a point in time.
 public record EquityPoint(string T, decimal Balance);
 
+/// One Backtest Trade: a CLOSING deal row from the report's deals table.
+/// T = close time (ISO), Dir = the POSITION's direction (opposite of the closing
+/// deal's type), Profit = net result incl. commission + swap (see ParseDeals).
+public record BtTrade(string T, string Dir, decimal Lots, decimal Profit);
+
 /// One EA input line from the report's settings block (see CONTEXT.md: EA Inputs).
 /// Section is the nearest preceding section marker ("" before the first marker).
 public record InputEntry(string Section, string Key, string Value);
@@ -39,6 +44,7 @@ public record ParsedBacktest
     public int TotalTrades { get; init; }
     public decimal WinRatePct { get; init; }
     public IReadOnlyList<EquityPoint> EquityCurve { get; init; } = [];
+    public IReadOnlyList<BtTrade> Trades { get; init; } = [];
     public IReadOnlyList<InputEntry> Inputs { get; init; } = [];
     public IReadOnlyDictionary<string, string> Raw { get; init; } = new Dictionary<string, string>();
 }
@@ -85,6 +91,7 @@ public static class BacktestParser
         }
 
         var kv = BuildKeyValues(grid);
+        var (equityCurve, trades) = ParseDeals(grid);
 
         var expert = Get(kv, "expert");
         if (string.IsNullOrWhiteSpace(expert))
@@ -117,7 +124,8 @@ public static class BacktestParser
             EquityDrawdownMaxAbs = NumBeforeParens(Get(kv, "equityDdMax")),
             TotalTrades = (int)Num(Get(kv, "totalTrades")),
             WinRatePct = PercentInParens(Get(kv, "profitTrades")),
-            EquityCurve = ParseEquityCurve(grid),
+            EquityCurve = equityCurve,
+            Trades = trades,
             Inputs = ParseInputs(grid),
             Raw = kv,
         };
@@ -278,23 +286,40 @@ public static class BacktestParser
         entries.Add(new InputEntry(section, key, value));
     }
 
-    // Read the deals table ("การซื้อขาย"/"Deals"): each row's running "Balance" column
-    // becomes an equity point. The first row is the opening "balance" deposit. Long runs
-    // are stride-downsampled to <=1000 points (always keeping the first and last).
-    private static IReadOnlyList<EquityPoint> ParseEquityCurve(string[][] grid)
+    // Read the deals table ("การซื้อขาย"/"Deals") in one pass:
+    //  • Equity curve: each row's running "Balance" column becomes an equity point.
+    //    The first row is the opening "balance" deposit. Long runs are
+    //    stride-downsampled to <=1000 points (always keeping the first and last).
+    //  • Backtest Trades: every deal row whose direction contains "out" (out, in/out)
+    //    is a closed trade. Dir is the POSITION's direction — the opposite of the
+    //    closing deal's type (a buy deal closes a sell position). Profit is the
+    //    row's Profit + Commission + Swap. Entry ("in") rows carry their own
+    //    commission (verified in omg.xlsx/qa.xlsx: e.g. -0.30 per in-leg), so those
+    //    fees are accumulated and folded into the NEXT out-trade's Profit — this
+    //    keeps the invariant Σ per-trade Profit == report Total Net Profit exact.
+    private static (IReadOnlyList<EquityPoint> Curve, IReadOnlyList<BtTrade> Trades) ParseDeals(string[][] grid)
     {
         var section = -1;
         for (var r = 0; r < grid.Length; r++)
             if (grid[r].Length > 0 && DealsSection.Contains(grid[r][0].ToLowerInvariant()))
             { section = r; break; }
-        if (section < 0 || section + 1 >= grid.Length) return [];
+        if (section < 0 || section + 1 >= grid.Length) return ([], []);
 
         var header = grid[section + 1];
         int timeCol = IndexOf(header, "เวลา", "time");
         int balCol = IndexOf(header, "balance", "ยอดคงเหลือ");
-        if (timeCol < 0 || balCol < 0) return [];
+        if (timeCol < 0 || balCol < 0) return ([], []);
+        int typeCol = IndexOf(header, "ประเภท", "type");
+        int dirCol = IndexOf(header, "ทิศทาง", "direction");
+        int volCol = IndexOf(header, "volume", "ปริมาณ");
+        int comCol = IndexOf(header, "ค่าธรรมเนียม", "commission");
+        int swapCol = IndexOf(header, "swap");
+        int profitCol = IndexOf(header, "กำไร", "profit");
+        var canTrade = typeCol >= 0 && dirCol >= 0 && profitCol >= 0;
 
         var points = new List<EquityPoint>();
+        var trades = new List<BtTrade>();
+        var pendingFees = 0m; // in-row commission+swap awaiting the next out-trade
         for (var r = section + 2; r < grid.Length; r++)
         {
             var row = grid[r];
@@ -304,9 +329,24 @@ public static class BacktestParser
             // Skip summary/totals rows that have no timestamp
             if (row[timeCol].Length == 0) continue;
             points.Add(new EquityPoint(NormalizeTime(row[timeCol]), Num(row[balCol])));
+
+            if (!canTrade) continue;
+            var type = At(row, typeCol).ToLowerInvariant();
+            if (type is not ("buy" or "sell")) continue;   // skips the opening "balance" row
+            var fees = Num(At(row, comCol)) + Num(At(row, swapCol));
+            var dir = At(row, dirCol).ToLowerInvariant();
+            if (!dir.Contains("out")) { pendingFees += fees; continue; } // entry leg: defer its fees
+            trades.Add(new BtTrade(
+                NormalizeTime(row[timeCol]),
+                type == "buy" ? "sell" : "buy",
+                Num(At(row, volCol)),
+                Num(At(row, profitCol)) + fees + pendingFees));
+            pendingFees = 0m;
         }
-        return Downsample(points, 1000);
+        return (Downsample(points, 1000), trades);
     }
+
+    private static string At(string[] row, int col) => col >= 0 && col < row.Length ? row[col] : "";
 
     private static int IndexOf(string[] header, params string[] labels)
     {
