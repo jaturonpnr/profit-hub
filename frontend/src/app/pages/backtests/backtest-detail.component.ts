@@ -6,7 +6,7 @@ import {
   NgApexchartsModule, ApexChart, ApexAxisChartSeries, ApexFill, ApexStroke,
   ApexDataLabels, ApexGrid, ApexXAxis, ApexYAxis, ApexTooltip,
 } from 'ng-apexcharts';
-import { LucideAngularModule, ArrowLeft } from 'lucide-angular';
+import { LucideAngularModule, ArrowLeft, ChevronRight } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
 import { UiCardComponent, UiSpinnerComponent } from '../../shared/ui';
 import { BacktestSummary } from './backtests.component';
@@ -15,6 +15,8 @@ interface EquityPoint { t: string; balance: number; }
 interface InputEntry { section: string; key: string; value: string; }
 interface HeatCell { dow: number; hour: number; netProfit: number; tradeCount: number; }
 interface MonthlyRow { month: string; netProfit: number; tradeCount: number; }
+interface BtTrade { t: string; dir: string; lots: number; profit: number; } // ISO broker time
+interface DayRow { day: string; netProfit: number; tradeCount: number; }
 
 const DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
@@ -137,17 +139,51 @@ const STAT_TILES: { key: string; label: string; loss?: boolean }[] = [
 
         @if (monthly().length > 0) {
           <ui-card [hasHeader]="true">
-            <div uiCardHeader><h2 class="text-sm font-medium text-text-muted">กำไรรายเดือน (backtest)</h2></div>
+            <div uiCardHeader><h2 class="text-sm font-medium text-text-muted">กำไรรายเดือน (backtest) — คลิกเดือนเพื่อดูรายวัน, คลิกวันเพื่อดูรายไม้</h2></div>
             <div class="overflow-x-auto">
               <table class="w-full text-xs">
                 <thead><tr class="text-text-faint"><th class="px-3 py-2 text-left">เดือน</th><th class="px-3 py-2 text-right">Net Profit</th><th class="px-3 py-2 text-right">ไม้</th></tr></thead>
                 <tbody>
                   @for (m of monthly(); track m.month) {
-                    <tr class="border-t border-border-subtle">
-                      <td class="px-3 py-1.5 tabular-nums text-text-muted">{{ m.month }}</td>
+                    <tr class="cursor-pointer border-t border-border-subtle transition-colors hover:bg-surface-raised"
+                        (click)="toggleMonth(m.month)">
+                      <td class="px-3 py-1.5 tabular-nums text-text-muted">
+                        <span class="inline-flex items-center gap-1">
+                          <lucide-icon [img]="icons.ChevronRight" class="h-3 w-3 transition-transform" [class.rotate-90]="expandedMonth() === m.month"></lucide-icon>
+                          {{ m.month }}
+                        </span>
+                      </td>
                       <td class="px-3 py-1.5 text-right tabular-nums" [class.text-profit]="m.netProfit >= 0" [class.text-loss]="m.netProfit < 0">{{ m.netProfit | number:'1.2-2' }}</td>
                       <td class="px-3 py-1.5 text-right tabular-nums">{{ m.tradeCount }}</td>
                     </tr>
+                    @if (expandedMonth() === m.month) {
+                      @for (d of daysOf(m.month); track d.day) {
+                        <tr class="cursor-pointer border-t border-border/30 bg-surface-raised/40 transition-colors hover:bg-surface-raised"
+                            (click)="toggleDay(d.day)">
+                          <td class="py-1 pl-9 pr-3 tabular-nums text-text-muted">
+                            <span class="inline-flex items-center gap-1">
+                              <lucide-icon [img]="icons.ChevronRight" class="h-3 w-3 transition-transform" [class.rotate-90]="expandedDay() === d.day"></lucide-icon>
+                              {{ d.day }}
+                            </span>
+                          </td>
+                          <td class="px-3 py-1 text-right tabular-nums" [class.text-profit]="d.netProfit >= 0" [class.text-loss]="d.netProfit < 0">{{ d.netProfit | number:'1.2-2' }}</td>
+                          <td class="px-3 py-1 text-right tabular-nums text-text-muted">{{ d.tradeCount }}</td>
+                        </tr>
+                        @if (expandedDay() === d.day) {
+                          @for (t of tradesOf(d.day); track $index) {
+                            <tr class="border-t border-border/20 bg-surface-raised/70">
+                              <td class="py-1 pl-14 pr-3 font-mono text-[11px] text-text-faint">{{ t.time }}</td>
+                              <td class="px-3 py-1 text-right">
+                                <span class="mr-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+                                      [class]="t.dir === 'buy' ? 'bg-profit/15 text-profit' : 'bg-loss/15 text-loss'">{{ t.dir }}</span>
+                                <span class="tabular-nums" [class.text-profit]="t.profit >= 0" [class.text-loss]="t.profit < 0">{{ t.profit | number:'1.2-2' }}</span>
+                              </td>
+                              <td class="px-3 py-1 text-right tabular-nums text-text-faint">{{ t.lots | number:'1.2-2' }} lots</td>
+                            </tr>
+                          }
+                        }
+                      }
+                    }
                   }
                 </tbody>
               </table>
@@ -190,7 +226,10 @@ export class BacktestDetailComponent implements OnInit {
   tradeStats = signal<Record<string, string>>({});
   heatmap = signal<HeatCell[]>([]);
   monthly = signal<MonthlyRow[]>([]);
-  readonly icons = { ArrowLeft };
+  private trades = signal<BtTrade[]>([]);
+  expandedMonth = signal<string | null>(null);
+  expandedDay = signal<string | null>(null);
+  readonly icons = { ArrowLeft, ChevronRight };
   readonly dows = DOW;
   readonly hours = Array.from({ length: 24 }, (_, i) => i);
 
@@ -220,6 +259,7 @@ export class BacktestDetailComponent implements OnInit {
       const d = await firstValueFrom(this.api.get<{
         summary: BacktestSummary; equityCurve: EquityPoint[]; inputs: InputEntry[];
         tradeStats: Record<string, string>; heatmap: HeatCell[]; monthly: MonthlyRow[];
+        trades: BtTrade[];
       }>(`/api/backtests/${id}`));
       this.s.set(d.summary);
       this.points.set(d.equityCurve);
@@ -227,9 +267,49 @@ export class BacktestDetailComponent implements OnInit {
       this.tradeStats.set(d.tradeStats ?? {});
       this.heatmap.set(d.heatmap ?? []);
       this.monthly.set(d.monthly ?? []);
+      this.trades.set(d.trades ?? []);
     } finally {
       this.loading.set(false);
     }
+  }
+
+  // ── Month → day → trades drill-down (broker time; ISO strings sliced, no Date parsing) ──
+  toggleMonth(month: string) {
+    this.expandedMonth.set(this.expandedMonth() === month ? null : month);
+    this.expandedDay.set(null); // collapse day level when switching months
+  }
+  toggleDay(day: string) {
+    this.expandedDay.set(this.expandedDay() === day ? null : day);
+  }
+
+  // O(1) template lookups, rebuilt only when trades change.
+  private byDay = computed(() => {
+    const m = new Map<string, BtTrade[]>();
+    for (const t of this.trades()) {
+      const day = t.t.slice(0, 10);          // "2026-05-04"
+      if (!m.has(day)) m.set(day, []);
+      m.get(day)!.push(t);
+    }
+    return m;
+  });
+  private dayRowsByMonth = computed(() => {
+    const m = new Map<string, DayRow[]>();
+    for (const [day, list] of this.byDay()) {
+      const month = day.slice(0, 7);          // "2026-05"
+      if (!m.has(month)) m.set(month, []);
+      m.get(month)!.push({
+        day,
+        netProfit: Math.round(list.reduce((s, t) => s + t.profit, 0) * 100) / 100,
+        tradeCount: list.length,
+      });
+    }
+    for (const rows of m.values()) rows.sort((a, b) => a.day.localeCompare(b.day));
+    return m;
+  });
+
+  daysOf(month: string): DayRow[] { return this.dayRowsByMonth().get(month) ?? []; }
+  tradesOf(day: string) {
+    return (this.byDay().get(day) ?? []).map(t => ({ ...t, time: t.t.slice(11, 19) }));
   }
 
   private maxAbsHeat = computed(() => Math.max(1, ...this.heatmap().map(c => Math.abs(c.netProfit))));
