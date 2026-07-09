@@ -72,6 +72,7 @@ public class BacktestsTests(ApiFactory f) : IClassFixture<ApiFactory>
         // a Thai-locale host renders the Buddhist year ("2569-05") without InvariantCulture.
         Assert.Equal("2026-05", detail.GetProperty("monthly")[0].GetProperty("month").GetString());
         Assert.Equal("384.6", detail.GetProperty("tradeStats").GetProperty("largestWin").GetString());
+        Assert.Equal(49, detail.GetProperty("trades").GetArrayLength()); // raw per-trade series for the month→day drill-down
     }
 
     [Fact]

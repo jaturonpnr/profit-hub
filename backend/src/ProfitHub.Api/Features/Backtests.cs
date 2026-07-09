@@ -65,7 +65,9 @@ public static class Backtests
                 .ToList();
             var tradeStats = BuildTradeStats(b.RawMetricsJson);
 
-            return Results.Ok(new { summary = ToSummaryFn(b), equityCurve = curve, inputs, tradeStats, heatmap, monthly });
+            // trades: the compact per-trade series itself — the frontend drills
+            // month → day → trades from it client-side (a few KB at most).
+            return Results.Ok(new { summary = ToSummaryFn(b), equityCurve = curve, inputs, tradeStats, heatmap, monthly, trades });
         });
 
         // Upload — multipart/form-data, field name "file".
