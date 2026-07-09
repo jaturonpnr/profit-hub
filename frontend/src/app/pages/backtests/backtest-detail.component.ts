@@ -145,40 +145,45 @@ const STAT_TILES: { key: string; label: string; loss?: boolean }[] = [
                 <thead><tr class="text-text-faint"><th class="px-3 py-2 text-left">เดือน</th><th class="px-3 py-2 text-right">Net Profit</th><th class="px-3 py-2 text-right">ไม้</th></tr></thead>
                 <tbody>
                   @for (m of monthly(); track m.month) {
-                    <tr class="cursor-pointer border-t border-border-subtle transition-colors hover:bg-surface-raised"
+                    <!-- Month: the only level with a divider line; expanded month gets a brand tint. -->
+                    <tr class="cursor-pointer border-t border-border-subtle transition-colors"
+                        [class]="expandedMonth() === m.month ? 'bg-brand-500/[0.07]' : 'hover:bg-surface-raised/60'"
                         (click)="toggleMonth(m.month)">
-                      <td class="px-3 py-1.5 tabular-nums text-text-muted">
-                        <span class="inline-flex items-center gap-1">
-                          <lucide-icon [img]="icons.ChevronRight" class="h-3 w-3 transition-transform" [class.rotate-90]="expandedMonth() === m.month"></lucide-icon>
+                      <td class="px-3 py-2 tabular-nums font-medium" [class.text-brand-300]="expandedMonth() === m.month" [class.text-text]="expandedMonth() !== m.month">
+                        <span class="inline-flex items-center gap-1.5">
+                          <lucide-icon [img]="icons.ChevronRight" class="h-3.5 w-3.5 text-text-faint transition-transform duration-200" [class.rotate-90]="expandedMonth() === m.month"></lucide-icon>
                           {{ m.month }}
                         </span>
                       </td>
-                      <td class="px-3 py-1.5 text-right tabular-nums" [class.text-profit]="m.netProfit >= 0" [class.text-loss]="m.netProfit < 0">{{ m.netProfit | number:'1.2-2' }}</td>
-                      <td class="px-3 py-1.5 text-right tabular-nums">{{ m.tradeCount }}</td>
+                      <td class="px-3 py-2 text-right tabular-nums font-semibold" [class.text-profit]="m.netProfit >= 0" [class.text-loss]="m.netProfit < 0">{{ m.netProfit | number:'1.2-2' }}</td>
+                      <td class="px-3 py-2 text-right tabular-nums text-text-faint">{{ m.tradeCount }}</td>
                     </tr>
                     @if (expandedMonth() === m.month) {
+                      <!-- Days: no dividers — one soft shaded band + brand left rail groups the whole month. -->
                       @for (d of daysOf(m.month); track d.day) {
-                        <tr class="cursor-pointer border-t border-border/30 bg-surface-raised/40 transition-colors hover:bg-surface-raised"
+                        <tr class="cursor-pointer bg-white/[0.02] transition-colors"
+                            [class]="expandedDay() === d.day ? 'bg-white/[0.05]' : 'hover:bg-white/[0.04]'"
                             (click)="toggleDay(d.day)">
-                          <td class="py-1 pl-9 pr-3 tabular-nums text-text-muted">
-                            <span class="inline-flex items-center gap-1">
-                              <lucide-icon [img]="icons.ChevronRight" class="h-3 w-3 transition-transform" [class.rotate-90]="expandedDay() === d.day"></lucide-icon>
-                              {{ d.day }}
+                          <td class="border-l-2 border-brand-500/40 py-1.5 pl-9 pr-3 tabular-nums text-text-muted">
+                            <span class="inline-flex items-center gap-1.5">
+                              <lucide-icon [img]="icons.ChevronRight" class="h-3 w-3 text-text-faint/60 transition-transform duration-200" [class.rotate-90]="expandedDay() === d.day"></lucide-icon>
+                              <span class="text-text-faint">{{ d.day.slice(0, 8) }}</span><span class="font-medium text-text-muted">{{ d.day.slice(8) }}</span>
                             </span>
                           </td>
-                          <td class="px-3 py-1 text-right tabular-nums" [class.text-profit]="d.netProfit >= 0" [class.text-loss]="d.netProfit < 0">{{ d.netProfit | number:'1.2-2' }}</td>
-                          <td class="px-3 py-1 text-right tabular-nums text-text-muted">{{ d.tradeCount }}</td>
+                          <td class="py-1.5 px-3 text-right tabular-nums" [class.text-profit]="d.netProfit >= 0" [class.text-loss]="d.netProfit < 0">{{ d.netProfit | number:'1.2-2' }}</td>
+                          <td class="py-1.5 px-3 text-right tabular-nums text-text-faint">{{ d.tradeCount }}</td>
                         </tr>
                         @if (expandedDay() === d.day) {
+                          <!-- Trades: deepest shade, no lines, muted — whitespace does the separation. -->
                           @for (t of tradesOf(d.day); track $index) {
-                            <tr class="border-t border-border/20 bg-surface-raised/70">
-                              <td class="py-1 pl-14 pr-3 font-mono text-[11px] text-text-faint">{{ t.time }}</td>
-                              <td class="px-3 py-1 text-right">
-                                <span class="mr-2 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase"
-                                      [class]="t.dir === 'buy' ? 'bg-profit/15 text-profit' : 'bg-loss/15 text-loss'">{{ t.dir }}</span>
+                            <tr class="bg-white/[0.05]">
+                              <td class="border-l-2 border-brand-500/40 py-1 pl-[3.75rem] pr-3 font-mono text-[11px] text-text-faint">{{ t.time }}</td>
+                              <td class="py-1 px-3 text-right">
+                                <span class="mr-2 rounded px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide"
+                                      [class]="t.dir === 'buy' ? 'bg-profit/10 text-profit/90' : 'bg-loss/10 text-loss/90'">{{ t.dir }}</span>
                                 <span class="tabular-nums" [class.text-profit]="t.profit >= 0" [class.text-loss]="t.profit < 0">{{ t.profit | number:'1.2-2' }}</span>
                               </td>
-                              <td class="px-3 py-1 text-right tabular-nums text-text-faint">{{ t.lots | number:'1.2-2' }} lots</td>
+                              <td class="py-1 px-3 text-right tabular-nums text-[11px] text-text-faint">{{ t.lots | number:'1.2-2' }} lots</td>
                             </tr>
                           }
                         }
