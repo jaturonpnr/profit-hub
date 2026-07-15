@@ -9,6 +9,8 @@ import { BacktestSummary } from './backtests.component';
 
 interface InputEntry { section: string; key: string; value: string; }
 interface Detail { summary: BacktestSummary; inputs: InputEntry[]; }
+/** User-defined readable name + per-value texts for one raw input key (Input Label, see CONTEXT.md). */
+interface InputLabelRow { key: string; label: string; valueMap: Record<string, string>; }
 
 /** One KPI comparison row: label + formatted values + which side is better. */
 interface KpiRow { label: string; a: string; b: string; better: 'a' | 'b' | null; }
@@ -96,9 +98,28 @@ interface DiffRow { section: string; key: string; a: string | null; b: string | 
                       }
                       <tr class="border-b border-border/40 last:border-0"
                           [class]="r.diff ? 'bg-brand-500/10 border-l-2 border-l-brand-500' : ''">
-                        <td class="py-1 pl-2 pr-4 font-mono text-xs text-text-muted">{{ r.key }}</td>
-                        <td class="py-1 pr-4 text-right tabular-nums">{{ r.a ?? '—' }}</td>
-                        <td class="py-1 pr-2 text-right tabular-nums">{{ r.b ?? '—' }}</td>
+                        <td class="py-1 pl-2 pr-4">
+                          @if (labelOf(r.key); as l) {
+                            <div class="text-sm font-medium text-text">{{ l }}</div>
+                            <div class="font-mono text-[10px] text-text-faint">{{ r.key }}</div>
+                          } @else {
+                            <span class="font-mono text-xs text-text-muted">{{ r.key }}</span>
+                          }
+                        </td>
+                        <td class="py-1 pr-4 text-right tabular-nums">
+                          @if (r.a !== null && valueTextOf(r.key, r.a); as vt) {
+                            {{ vt }} <span class="text-[10px] text-text-faint">({{ r.a }})</span>
+                          } @else {
+                            {{ r.a ?? '—' }}
+                          }
+                        </td>
+                        <td class="py-1 pr-2 text-right tabular-nums">
+                          @if (r.b !== null && valueTextOf(r.key, r.b); as vt) {
+                            {{ vt }} <span class="text-[10px] text-text-faint">({{ r.b }})</span>
+                          } @else {
+                            {{ r.b ?? '—' }}
+                          }
+                        </td>
                       </tr>
                     }
                   </tbody>
@@ -116,6 +137,8 @@ export class BacktestCompareComponent implements OnInit {
   b = signal<Detail | null>(null);
   loading = signal(true);
   showAll = signal(false);
+  // Input Labels: readable names/value texts per raw key (display only; diff stays on raw values).
+  labels = signal<Map<string, InputLabelRow>>(new Map());
   readonly icons = { ArrowLeft };
 
   constructor(private api: ApiService, private route: ActivatedRoute) {}
@@ -126,12 +149,15 @@ export class BacktestCompareComponent implements OnInit {
     const idB = q.get('b');
     try {
       if (idA && idB) {
-        const [da, db] = await Promise.all([
+        const [da, db, labelRows] = await Promise.all([
           firstValueFrom(this.api.get<Detail>(`/api/backtests/${idA}`)),
           firstValueFrom(this.api.get<Detail>(`/api/backtests/${idB}`)),
+          // Labels are decoration — a failed fetch must not break the page.
+          firstValueFrom(this.api.get<InputLabelRow[]>('/api/input-labels')).catch(() => [] as InputLabelRow[]),
         ]);
         this.a.set(da);
         this.b.set(db);
+        this.labels.set(new Map(labelRows.map(l => [l.key, l])));
       }
     } catch {
       // either fetch failed → "not found" fallback (a()/b() stays null)
@@ -188,6 +214,15 @@ export class BacktestCompareComponent implements OnInit {
 
   visibleRows = computed<DiffRow[]>(() =>
     this.showAll() ? this.diffRows() : this.diffRows().filter(r => r.diff));
+
+  // ── Input Labels display lookups (view only; diffRows above compares raw values) ──
+  labelOf(key: string): string | null {
+    const label = this.labels().get(key)?.label;
+    return label ? label : null;                 // "" → fall back to raw key
+  }
+  valueTextOf(key: string, value: string): string | null {
+    return this.labels().get(key)?.valueMap[value] ?? null;
+  }
 
   /** Section of the row before index i (or null) — drives group-header rows in the template. */
   previousSection(rows: DiffRow[], i: number): string | null {
