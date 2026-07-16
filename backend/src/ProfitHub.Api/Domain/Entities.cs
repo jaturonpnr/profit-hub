@@ -147,3 +147,15 @@ public class Withdrawal
     public string Note { get; set; } = "";
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
+
+/// A user-defined translation of one raw EA input key (see CONTEXT.md: Input Label).
+/// Global per User: one row per key applies to every Backtest/EA. ValueMapJson holds
+/// optional per-value texts, e.g. {"3":"Medium (1,000 USD)"}. Raw values stay the truth.
+public class InputLabel
+{
+    public long Id { get; set; }
+    public Guid UserId { get; set; }
+    public required string Key { get; set; }         // raw input key, e.g. "Inp_risk_level_auto"
+    public string Label { get; set; } = "";          // readable name; "" = unnamed
+    public string ValueMapJson { get; set; } = "{}"; // { rawValue: readableText }
+}

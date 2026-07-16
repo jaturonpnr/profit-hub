@@ -18,5 +18,6 @@ public static class Endpoints
         Backtests.Map(app);
         Executions.Map(app);
         Withdrawals.Map(app);
+        InputLabels.Map(app);
     }
 }

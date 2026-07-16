@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Insight> Insights => Set<Insight>();
     public DbSet<Backtest> Backtests => Set<Backtest>();
     public DbSet<Withdrawal> Withdrawals => Set<Withdrawal>();
+    public DbSet<InputLabel> InputLabels => Set<InputLabel>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -52,5 +53,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Withdrawal>().Property(w => w.Amount).HasPrecision(18, 2);
         b.Entity<Withdrawal>().Property(w => w.SuggestedAmount).HasPrecision(18, 2);
         b.Entity<Withdrawal>().Property(w => w.Capital).HasPrecision(18, 2);
+        b.Entity<InputLabel>().HasIndex(x => new { x.UserId, x.Key }).IsUnique();
+        b.Entity<InputLabel>().HasOne<User>().WithMany().HasForeignKey(l => l.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }

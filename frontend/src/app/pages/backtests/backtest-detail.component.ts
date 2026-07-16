@@ -1,18 +1,21 @@
 import { Component, OnInit, signal, computed } from '@angular/core';
 import { DecimalPipe, DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import {
   NgApexchartsModule, ApexChart, ApexAxisChartSeries, ApexFill, ApexStroke,
   ApexDataLabels, ApexGrid, ApexXAxis, ApexYAxis, ApexTooltip,
 } from 'ng-apexcharts';
-import { LucideAngularModule, ArrowLeft, ChevronRight } from 'lucide-angular';
+import { LucideAngularModule, ArrowLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-angular';
 import { ApiService } from '../../core/api.service';
-import { UiCardComponent, UiSpinnerComponent } from '../../shared/ui';
+import { UiCardComponent, UiSpinnerComponent, UiButtonComponent } from '../../shared/ui';
 import { BacktestSummary } from './backtests.component';
 
 interface EquityPoint { t: string; balance: number; }
 interface InputEntry { section: string; key: string; value: string; }
+/** User-defined readable name + per-value texts for one raw input key (Input Label, see CONTEXT.md). */
+interface InputLabelRow { key: string; label: string; valueMap: Record<string, string>; }
 interface HeatCell { dow: number; hour: number; netProfit: number; tradeCount: number; }
 interface MonthlyRow { month: string; netProfit: number; tradeCount: number; }
 interface BtTrade { t: string; dir: string; lots: number; profit: number; } // ISO broker time
@@ -36,7 +39,7 @@ const STAT_TILES: { key: string; label: string; loss?: boolean }[] = [
 @Component({
   selector: 'ph-backtest-detail',
   standalone: true,
-  imports: [DecimalPipe, DatePipe, RouterLink, NgApexchartsModule, LucideAngularModule, UiCardComponent, UiSpinnerComponent],
+  imports: [DecimalPipe, DatePipe, FormsModule, RouterLink, NgApexchartsModule, LucideAngularModule, UiCardComponent, UiSpinnerComponent, UiButtonComponent],
   template: `
     <div class="animate-fade-in flex flex-col gap-6">
       <a routerLink="/backtests" class="inline-flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors">
@@ -207,9 +210,62 @@ const STAT_TILES: { key: string; label: string; loss?: boolean }[] = [
                     <tbody>
                       @for (i of sec[1]; track i.key) {
                         <tr class="border-b border-border/40 last:border-0">
-                          <td class="py-1 pr-4 font-mono text-xs text-text-muted">{{ i.key }}</td>
-                          <td class="py-1 text-right tabular-nums">{{ i.value }}</td>
+                          <td class="py-1 pr-4">
+                            @if (labelOf(i.key); as l) {
+                              <div class="text-sm text-text">{{ l }}</div>
+                              <div class="font-mono text-[10px] text-text-faint">{{ i.key }}</div>
+                            } @else {
+                              <span class="font-mono text-xs text-text-muted">{{ i.key }}</span>
+                            }
+                          </td>
+                          <td class="py-1 text-right tabular-nums">
+                            @if (valueTextOf(i.key, i.value); as vt) {
+                              {{ vt }} <span class="text-[10px] text-text-faint">({{ i.value }})</span>
+                            } @else {
+                              {{ i.value }}
+                            }
+                          </td>
+                          <td class="w-8 py-1 pl-3 text-right">
+                            <button type="button" aria-label="ตั้งชื่อ" (click)="openEditor(i)"
+                              class="text-text-faint hover:text-brand-300 transition-colors">
+                              <lucide-icon [img]="icons.Pencil" class="h-3.5 w-3.5"></lucide-icon>
+                            </button>
+                          </td>
                         </tr>
+                        @if (editingKey() === i.key) {
+                          <tr class="border-b border-border/40 last:border-0">
+                            <td colspan="3" class="py-3">
+                              <div class="flex flex-col gap-2 rounded-md border border-border bg-surface-raised/40 p-3">
+                                <input [(ngModel)]="editLabel" placeholder="ชื่อที่อ่านง่าย" [attr.aria-label]="'ชื่อที่อ่านง่ายของ ' + i.key"
+                                  class="h-8 w-full rounded-md border border-border bg-surface-raised px-2.5 text-sm font-medium text-text placeholder:text-text-faint
+                                         focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30" />
+                                @for (p of editPairs; track $index) {
+                                  <div class="flex items-center gap-2">
+                                    <input [(ngModel)]="p.k" placeholder="ค่า"
+                                      class="h-8 w-24 rounded-md border border-border bg-surface-raised px-2.5 text-sm text-text placeholder:text-text-faint
+                                             focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30" />
+                                    <input [(ngModel)]="p.v" placeholder="ข้อความ"
+                                      class="h-8 min-w-0 flex-1 rounded-md border border-border bg-surface-raised px-2.5 text-sm text-text placeholder:text-text-faint
+                                             focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30" />
+                                    <button type="button" aria-label="ลบค่า" (click)="removePair($index)"
+                                      class="text-text-faint hover:text-loss transition-colors">
+                                      <lucide-icon [img]="icons.Trash2" class="h-3.5 w-3.5"></lucide-icon>
+                                    </button>
+                                  </div>
+                                }
+                                <div class="flex items-center justify-between gap-2">
+                                  <button uiButton type="button" variant="ghost" size="sm" (click)="addPair()">
+                                    <lucide-icon [img]="icons.Plus" class="h-3.5 w-3.5"></lucide-icon> เพิ่มค่า
+                                  </button>
+                                  <div class="flex items-center gap-2">
+                                    <button uiButton type="button" variant="ghost" size="sm" (click)="closeEditor()">ยกเลิก</button>
+                                    <button uiButton type="button" variant="primary" size="sm" [disabled]="saving()" (click)="saveLabel(i.key)">บันทึก</button>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        }
                       }
                     </tbody>
                   </table>
@@ -234,7 +290,13 @@ export class BacktestDetailComponent implements OnInit {
   private trades = signal<BtTrade[]>([]);
   expandedMonth = signal<string | null>(null);
   expandedDay = signal<string | null>(null);
-  readonly icons = { ArrowLeft, ChevronRight };
+  // Input Labels: readable names/value texts per raw key, global per user.
+  labels = signal<Map<string, InputLabelRow>>(new Map());
+  editingKey = signal<string | null>(null);
+  saving = signal(false);
+  editLabel = '';
+  editPairs: { k: string; v: string }[] = [];
+  readonly icons = { ArrowLeft, ChevronRight, Pencil, Plus, Trash2 };
   readonly dows = DOW;
   readonly hours = Array.from({ length: 24 }, (_, i) => i);
 
@@ -261,11 +323,16 @@ export class BacktestDetailComponent implements OnInit {
   async ngOnInit() {
     const id = this.route.snapshot.paramMap.get('id')!;
     try {
-      const d = await firstValueFrom(this.api.get<{
-        summary: BacktestSummary; equityCurve: EquityPoint[]; inputs: InputEntry[];
-        tradeStats: Record<string, string>; heatmap: HeatCell[]; monthly: MonthlyRow[];
-        trades: BtTrade[];
-      }>(`/api/backtests/${id}`));
+      const [d, labelRows] = await Promise.all([
+        firstValueFrom(this.api.get<{
+          summary: BacktestSummary; equityCurve: EquityPoint[]; inputs: InputEntry[];
+          tradeStats: Record<string, string>; heatmap: HeatCell[]; monthly: MonthlyRow[];
+          trades: BtTrade[];
+        }>(`/api/backtests/${id}`)),
+        // Labels are decoration — a failed fetch must not break the page.
+        firstValueFrom(this.api.get<InputLabelRow[]>('/api/input-labels')).catch(() => [] as InputLabelRow[]),
+      ]);
+      this.labels.set(new Map(labelRows.map(l => [l.key, l])));
       this.s.set(d.summary);
       this.points.set(d.equityCurve);
       this.inputs.set(d.inputs ?? []);
@@ -275,6 +342,52 @@ export class BacktestDetailComponent implements OnInit {
       this.trades.set(d.trades ?? []);
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  // ── Input Labels: display lookups + inline editor ──
+  labelOf(key: string): string | null {
+    const label = this.labels().get(key)?.label;
+    return label ? label : null;                 // "" → fall back to raw key
+  }
+  valueTextOf(key: string, value: string): string | null {
+    return this.labels().get(key)?.valueMap[value] ?? null;
+  }
+
+  openEditor(i: InputEntry) {
+    if (this.editingKey() === i.key) { this.closeEditor(); return; }
+    const row = this.labels().get(i.key);
+    this.editLabel = row?.label ?? '';
+    this.editPairs = Object.entries(row?.valueMap ?? {}).map(([k, v]) => ({ k, v }));
+    // Convenience: no mapping yet + numeric raw value → prefill one pair to name.
+    if (this.editPairs.length === 0 && /^-?\d+(\.\d+)?$/.test(i.value.trim())) {
+      this.editPairs = [{ k: i.value.trim(), v: '' }];
+    }
+    this.editingKey.set(i.key);
+  }
+  closeEditor() { this.editingKey.set(null); }
+  addPair() { this.editPairs.push({ k: '', v: '' }); }
+  removePair(idx: number) { this.editPairs.splice(idx, 1); }
+
+  async saveLabel(key: string) {
+    const label = this.editLabel.trim();
+    const valueMap: Record<string, string> = {};
+    for (const p of this.editPairs) {
+      const k = p.k.trim(), v = p.v.trim();
+      if (k && v) valueMap[k] = v;               // drop incomplete pairs
+    }
+    this.saving.set(true);
+    try {
+      await firstValueFrom(this.api.put(`/api/input-labels/${encodeURIComponent(key)}`, { label, valueMap }));
+      const m = new Map(this.labels());
+      if (!label && Object.keys(valueMap).length === 0) m.delete(key); // empty payload = backend deleted it
+      else m.set(key, { key, label, valueMap });
+      this.labels.set(m);
+      this.closeEditor();
+    } catch {
+      // keep the editor open so the user can retry
+    } finally {
+      this.saving.set(false);
     }
   }
 
